@@ -21,43 +21,31 @@
     />
 
     <style>
-      html,
-      body,
-      #map {
-        height: 100%;
-        margin: 0;
-      }
+      html, body, #map { height: 100%; margin: 0; }
 
+      /* ===== TOPBAR: равные отступы слева/справа, центрирование и ограничение ширины ===== */
       .topbar {
         position: absolute;
         z-index: 1000;
-        left: 10px;
         top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: calc(100% - 20px); /* по 10px с каждой стороны */
+        max-width: 980px;         /* чтобы не растягивалась на десктопе */
         background: rgba(255, 255, 255, 0.9);
         padding: 8px 10px;
         border-radius: 10px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         display: flex;
         gap: 8px;
         flex-wrap: wrap;
         align-items: center;
         font: 14px/1.3 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       }
+      .topbar button { border: 1px solid #ddd; padding: 6px 10px; border-radius: 8px; background: #fff; cursor: pointer; }
+      .topbar input[type="number"] { width: 80px; padding: 4px 6px; }
 
-      .topbar button {
-        border: 1px solid #ddd;
-        padding: 6px 10px;
-        border-radius: 8px;
-        background: #fff;
-        cursor: pointer;
-      }
-
-      .topbar input[type="number"] {
-        width: 80px;
-        padding: 4px 6px;
-      }
-
-      /* --- Легенда --- */
+      /* ===== ЛЕГЕНДА (с плавным сворачиванием) ===== */
       .legend {
         position: absolute;
         left: 10px;
@@ -65,103 +53,71 @@
         z-index: 1000;
         background: rgba(255, 255, 255, 0.92);
         border-radius: 10px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         font: 13px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-        overflow: hidden; /* важно для анимации высоты контента */
-      }
-
-      .legend-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 10px;
-        cursor: pointer;
-        background: #f5f5f5;
-        border-bottom: 1px solid #ddd;
-      }
-
-      .legend-header:hover {
-        background: #eee;
-      }
-
-      #legendToggle {
-        font-size: 16px;
-        transition: transform 0.3s ease;
-      }
-
-      .legend.collapsed #legendToggle {
-        transform: rotate(-90deg);
-      }
-
-      /* Плавная анимация сворачивания/разворачивания по реальной высоте */
-      .legend-content {
-        height: auto;           /* конечное открытое состояние */
-        opacity: 1;
         overflow: hidden;
+      }
+      .legend-header {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 10px; cursor: pointer; background: #f5f5f5; border-bottom: 1px solid #ddd;
+      }
+      .legend-header:hover { background: #eee; }
+      #legendToggle { font-size: 16px; transition: transform 0.3s ease; }
+      .legend.collapsed #legendToggle { transform: rotate(-90deg); }
+
+      .legend-content {
+        height: auto; opacity: 1; overflow: hidden;
         transition: height 0.35s ease, opacity 0.25s ease;
         padding: 10px;
       }
       .legend.collapsed .legend-content {
-        height: 0 !important;   /* свернутое состояние */
-        opacity: 0;
-        padding-top: 0;
-        padding-bottom: 0;
+        height: 0 !important; opacity: 0; padding-top: 0; padding-bottom: 0;
       }
 
-      .legend .item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin: 5px 0;
-      }
+      .legend .item { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+      .dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; border: 2px solid #333; }
+      .dot.blue{background:#89b5ff;border-color:#2b6cff;} .dot.green{background:#b8f7b1;border-color:#2a7a2a;}
+      .dot.orange{background:#ffd3a1;border-color:#c76a00;} .dot.gray{background:#e2e2e2;border-color:#666;}
+      .dot.red{background:#ffb3b3;border-color:#d70000;}
 
-      .dot {
-        width: 14px;
-        height: 14px;
-        border-radius: 50%;
-        display: inline-block;
-        border: 2px solid #333;
-      }
-      .dot.blue   { background: #89b5ff; border-color: #2b6cff; }
-      .dot.green  { background: #b8f7b1; border-color: #2a7a2a; }
-      .dot.orange { background: #ffd3a1; border-color: #c76a00; }
-      .dot.gray   { background: #e2e2e2; border-color: #666; }
-      .dot.red    { background: #ffb3b3; border-color: #d70000; }
-
-      .notice {
-        font-size: 12px;
-        color: #444;
-        margin-top: 6px;
-      }
-
-      .footer {
+      /* ===== СВОРАТЫВАЕМАЯ ПАНЕЛЬ В НИЖНЕМ ПРАВОМ УГЛУ ===== */
+      .footer-panel {
         position: absolute;
-        bottom: 10px;
         right: 10px;
+        bottom: 10px;
         z-index: 1000;
         background: rgba(255, 255, 255, 0.92);
-        padding: 6px 10px;
         border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.1);
         font: 12px/1.3 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        overflow: hidden;
+        min-width: 220px;
+      }
+      .footer-header {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        padding: 8px 10px; cursor: pointer; background: #f5f5f5; border-bottom: 1px solid #ddd;
+      }
+      .footer-header:hover { background: #eee; }
+      #footerToggle { font-size: 14px; transition: transform 0.3s ease; }
+      .footer-panel.collapsed #footerToggle { transform: rotate(-90deg); }
+      .footer-content {
+        height: auto; opacity: 1; overflow: hidden;
+        transition: height 0.35s ease, opacity 0.25s ease, padding 0.25s ease;
+        padding: 8px 10px;
+      }
+      .footer-panel.collapsed .footer-content {
+        height: 0 !important; opacity: 0; padding-top: 0; padding-bottom: 0;
       }
 
-      .checkboxes {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-      }
-
-      .checkboxes label {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
+      .checkboxes { display: flex; gap: 10px; flex-wrap: wrap; }
+      .checkboxes label { display: flex; align-items: center; gap: 6px; }
     </style>
   </head>
 
   <body>
     <div id="map"></div>
 
+    <!-- TOPBAR -->
     <div class="topbar">
       <strong>Радиус поиска (км)</strong>
       <input id="radiusKm" type="number" value="50" min="5" max="300" step="5" />
@@ -176,6 +132,7 @@
       <button id="btnReload">Обновить точки</button>
     </div>
 
+    <!-- ЛЕГЕНДА -->
     <div class="legend" id="legend">
       <div class="legend-header" id="legendHeader">
         <strong>Обозначения</strong>
@@ -190,7 +147,16 @@
       </div>
     </div>
 
-    <div class="footer">© TruckWork · Карта: © OpenStreetMap contributors</div>
+    <!-- СВОРАТЫВАЕМАЯ ПАНЕЛЬ В НИЖНЕМ ПРАВОМ УГЛУ -->
+    <div class="footer-panel" id="footerPanel">
+      <div class="footer-header" id="footerHeader">
+        <strong>Справка</strong>
+        <span id="footerToggle">▼</span>
+      </div>
+      <div class="footer-content" id="footerContent">
+        © TruckWork · Карта: © OpenStreetMap contributors
+      </div>
+    </div>
 
     <script
       src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
@@ -202,7 +168,7 @@
     <script>
       // --- Base Map ---
       const map = L.map("map", { zoomSnap: 0.5, worldCopyJump: true })
-        .setView([52.2297, 21.0122], 5); // fallback: Warsaw
+        .setView([52.2297, 21.0122], 5);
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
@@ -214,16 +180,14 @@
         return L.divIcon({
           className: "custom-marker",
           html: `<span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:${color};border:2px solid #333"></span>`,
-          iconSize: [16, 16],
-          iconAnchor: [8, 8],
+          iconSize: [16, 16], iconAnchor: [8, 8],
         });
       }
-
       const ICONS = {
-        truck: circleMarker("#89b5ff"),   // blue
-        fuel: circleMarker("#b8f7b1"),    // green
-        motel: circleMarker("#ffd3a1"),   // orange
-        industrial: circleMarker("#e2e2e2") // gray
+        truck: circleMarker("#89b5ff"),
+        fuel: circleMarker("#b8f7b1"),
+        motel: circleMarker("#ffd3a1"),
+        industrial: circleMarker("#e2e2e2"),
       };
 
       // --- Layers ---
@@ -241,22 +205,14 @@
       industrialLayer.addTo(map);
       noGoLayer.addTo(map);
 
-      // --- User location marker ---
-      let userMarker = null;
-      let userCircle = null;
-
+      // --- User location ---
+      let userMarker = null; let userCircle = null;
       function setUserLocation(lat, lon) {
         if (userMarker) map.removeLayer(userMarker);
         if (userCircle) map.removeLayer(userCircle);
-
-        userMarker = L.marker([lat, lon], { title: "Вы здесь" })
-          .addTo(map)
-          .bindPopup("Ваше местоположение");
-
-        userCircle = L.circle([lat, lon], { radius: 30, color: "#2b6cff", weight: 2 })
-          .addTo(map);
+        userMarker = L.marker([lat, lon], { title: "Вы здесь" }).addTo(map).bindPopup("Ваше местоположение");
+        userCircle = L.circle([lat, lon], { radius: 30, color: "#2b6cff", weight: 2 }).addTo(map);
       }
-
       function locateUser() {
         return new Promise((resolve) => {
           if (!navigator.geolocation) return resolve(null);
@@ -270,62 +226,48 @@
 
       // --- Overpass helpers ---
       const OP_URL = "https://overpass-api.de/api/interpreter";
-
       function overpassFetch(query) {
         const url = OP_URL + "?data=" + encodeURIComponent(query);
         return fetch(url).then((r) => r.json());
       }
-
       function toLatLng(el) {
         if (el.type === "node") return [el.lat, el.lon];
         if (el.center) return [el.center.lat, el.center.lon];
         return null;
       }
-
-      function elemName(tags = {}) {
-        return tags.name || tags.ref || "Без названия";
-      }
-
+      function elemName(tags = {}) { return tags.name || tags.ref || "Без названия"; }
       function popupFromTags(tags = {}) {
         const name = elemName(tags);
-        const addr = [tags["addr:street"], tags["addr:housenumber"], tags["addr:city"]]
-          .filter(Boolean)
-          .join(" ");
-        const brand   = tags.brand  ? `<div><strong>Бренд:</strong> ${tags.brand}</div>`   : "";
-        const phone   = tags.phone  ? `<div><strong>Тел.:</strong> ${tags.phone}</div>`     : "";
-        const website = tags.website? `<div><a href="${tags.website}" target="_blank" rel="noopener">Сайт</a></div>`: "";
+        const addr = [tags["addr:street"], tags["addr:housenumber"], tags["addr:city"]].filter(Boolean).join(" ");
+        const brand = tags.brand ? `<div><strong>Бренд:</strong> ${tags.brand}</div>` : "";
+        const phone = tags.phone ? `<div><strong>Тел.:</strong> ${tags.phone}</div>` : "";
+        const website = tags.website ? `<div><a href="${tags.website}" target="_blank" rel="noopener">Сайт</a></div>` : "";
         return `<div style="min-width:200px"><strong>${name}</strong>${addr?`<div>${addr}</div>`:""}${brand}${phone}${website}</div>`;
       }
-
       function radiusMeters() {
         const km = parseFloat(document.getElementById("radiusKm").value) || 50;
         return Math.max(5000, Math.min(300000, km * 1000));
       }
-
       function buildQuery(lat, lon, r) {
         const qTruck = `(
           node["amenity"="parking"]["parking"="truck"](around:${r},${lat},${lon});
           way["amenity"="parking"]["parking"="truck"](around:${r},${lat},${lon});
           relation["amenity"="parking"]["parking"="truck"](around:${r},${lat},${lon});
         );`;
-
         const qFuel = `(
           node["amenity"="fuel"](around:${r},${lat},${lon});
           way["amenity"="fuel"](around:${r},${lat},${lon});
           relation["amenity"="fuel"](around:${r},${lat},${lon});
         );`;
-
         const qMotel = `(
           node["tourism"~"^(motel|hotel)$"](around:${r},${lat},${lon});
           way["tourism"~"^(motel|hotel)$"](around:${r},${lat},${lon});
           relation["tourism"~"^(motel|hotel)$"](around:${r},${lat},${lon});
         );`;
-
         const qIndustrial = `(
           way["landuse"="industrial"](around:${r},${lat},${lon});
           relation["landuse"="industrial"](around:${r},${lat},${lon});
         );`;
-
         return `
           [out:json][timeout:50];
           (
@@ -337,34 +279,22 @@
           out center tags;
         `;
       }
-
       async function loadPOIs(lat, lon) {
         const r = radiusMeters();
         const query = buildQuery(lat, lon, r);
-
-        clusterTruck.clearLayers();
-        clusterFuel.clearLayers();
-        clusterMotel.clearLayers();
-        industrialLayer.clearLayers();
-
+        clusterTruck.clearLayers(); clusterFuel.clearLayers(); clusterMotel.clearLayers(); industrialLayer.clearLayers();
         try {
           const data = await overpassFetch(query);
-          const nearbyParkings = []; // для проверки близости к АЗС
-
+          const nearbyParkings = [];
           (data.elements || []).forEach((el) => {
-            const p = toLatLng(el);
-            if (!p) return;
+            const p = toLatLng(el); if (!p) return;
             const tags = el.tags || {};
-
             if (tags.amenity === "parking" && tags.parking === "truck") {
               const m = L.marker(p, { icon: ICONS.truck }).bindPopup(popupFromTags(tags));
-              m.addTo(clusterTruck);
-              nearbyParkings.push({ lat: p[0], lon: p[1] });
+              m.addTo(clusterTruck); nearbyParkings.push({ lat: p[0], lon: p[1] });
             } else if (tags.amenity === "fuel") {
               const hasParkingTag = (tags.parking === "yes" || tags["parking:lanes"]);
-              const nearTruckParking = nearbyParkings.some(
-                (pk) => distanceMeters(p[0], p[1], pk.lat, pk.lon) < 150
-              );
+              const nearTruckParking = nearbyParkings.some((pk) => distanceMeters(p[0], p[1], pk.lat, pk.lon) < 150);
               if (hasParkingTag || nearTruckParking) {
                 const m = L.marker(p, { icon: ICONS.fuel }).bindPopup(popupFromTags(tags));
                 m.addTo(clusterFuel);
@@ -376,8 +306,7 @@
               if (el.geometry) {
                 const latlngs = el.geometry.map((g) => [g.lat, g.lon]);
                 const poly = L.polygon(latlngs, { color: "#666", weight: 1, fillColor: "#999", fillOpacity: 0.15 });
-                poly.bindPopup(popupFromTags(tags));
-                poly.addTo(industrialLayer);
+                poly.bindPopup(popupFromTags(tags)); poly.addTo(industrialLayer);
               } else {
                 L.circle(p, { radius: 80, color: "#666", weight: 1, fillColor: "#999", fillOpacity: 0.15 })
                   .addTo(industrialLayer);
@@ -390,134 +319,104 @@
         }
       }
 
-      // --- No-go zones (красные зоны) ---
+      // --- No-go zones (demo) ---
       const demoNoGo = {
         type: "FeatureCollection",
         features: [
-          {
-            type: "Feature",
-            properties: { name: "Примерная зона" },
-            geometry: {
-              type: "Polygon",
-              coordinates: [[[21.0, 52.22], [21.02, 52.22], [21.02, 52.24], [21.0, 52.24], [21.0, 52.22]]]
-            }
-          }
+          { type: "Feature", properties: { name: "Примерная зона" },
+            geometry: { type: "Polygon", coordinates: [[[21.0,52.22],[21.02,52.22],[21.02,52.24],[21.0,52.24],[21.0,52.22]]] } }
         ]
       };
-
       function loadNoGo() {
         noGoLayer.clearLayers();
         if (!document.getElementById("cbNoGo").checked) return;
-        // Для своего файла: fetch('./no_go_zones.geojson').then(r=>r.json()).then(geo=> noGoLayer.addData(geo));
+        // fetch('./no_go_zones.geojson').then(r=>r.json()).then(geo=> noGoLayer.addData(geo));
         noGoLayer.addData(demoNoGo);
       }
 
       // --- Utils ---
       function distanceMeters(lat1, lon1, lat2, lon2) {
-        const R = 6371000;
-        const dLat = ((lat2 - lat1) * Math.PI) / 180;
-        const dLon = ((lon2 - lon1) * Math.PI) / 180;
-        const a =
-          Math.sin(dLat / 2) ** 2 +
-          Math.cos((lat1 * Math.PI) / 180) *
-            Math.cos((lat2 * Math.PI) / 180) *
-            Math.sin(dLon / 2) ** 2;
-        return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const R = 6371000, dLat=((lat2-lat1)*Math.PI)/180, dLon=((lon2-lon1)*Math.PI)/180;
+        const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+        return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
       }
 
       // --- UI events ---
       document.getElementById("btnLocate").addEventListener("click", async () => {
         const loc = await locateUser();
-        if (loc) {
-          setUserLocation(loc.lat, loc.lon);
-          map.setView([loc.lat, loc.lon], 11);
-        } else {
-          alert("Не удалось определить геолокацию в браузере.");
-        }
+        if (loc) { setUserLocation(loc.lat, loc.lon); map.setView([loc.lat, loc.lon], 11); }
+        else { alert("Не удалось определить геолокацию в браузере."); }
       });
-
       document.getElementById("btnReload").addEventListener("click", async () => {
         const center = userMarker ? userMarker.getLatLng() : map.getCenter();
-        await loadPOIs(center.lat, center.lng);
-        loadNoGo();
+        await loadPOIs(center.lat, center.lng); loadNoGo();
       });
-
       document.getElementById("cbTruck").addEventListener("change", () => {
-        if (document.getElementById("cbTruck").checked) map.addLayer(clusterTruck);
-        else map.removeLayer(clusterTruck);
+        if (document.getElementById("cbTruck").checked) map.addLayer(clusterTruck); else map.removeLayer(clusterTruck);
       });
       document.getElementById("cbFuel").addEventListener("change", () => {
-        if (document.getElementById("cbFuel").checked) map.addLayer(clusterFuel);
-        else map.removeLayer(clusterFuel);
+        if (document.getElementById("cbFuel").checked) map.addLayer(clusterFuel); else map.removeLayer(clusterFuel);
       });
       document.getElementById("cbMotel").addEventListener("change", () => {
-        if (document.getElementById("cbMotel").checked) map.addLayer(clusterMotel);
-        else map.removeLayer(clusterMotel);
+        if (document.getElementById("cbMotel").checked) map.addLayer(clusterMotel); else map.removeLayer(clusterMotel);
       });
       document.getElementById("cbIndustrial").addEventListener("change", () => {
-        if (document.getElementById("cbIndustrial").checked) map.addLayer(industrialLayer);
-        else map.removeLayer(industrialLayer);
+        if (document.getElementById("cbIndustrial").checked) map.addLayer(industrialLayer); else map.removeLayer(industrialLayer);
       });
       document.getElementById("cbNoGo").addEventListener("change", loadNoGo);
 
       // --- Init ---
       (async function init() {
         const loc = await locateUser();
-        if (loc) {
-          setUserLocation(loc.lat, loc.lon);
-          map.setView([loc.lat, loc.lon], 11);
-        }
+        if (loc) { setUserLocation(loc.lat, loc.lon); map.setView([loc.lat, loc.lon], 11); }
         const center = loc ? [loc.lat, loc.lon] : [52.2297, 21.0122];
-        await loadPOIs(center[0], center[1]);
-        loadNoGo();
+        await loadPOIs(center[0], center[1]); loadNoGo();
       })();
 
-      // --- Toggle legend (плавная анимация высоты) ---
-      const legend         = document.getElementById("legend");
-      const legendHeader   = document.getElementById("legendHeader");
-      const legendContent  = document.getElementById("legendContent");
-
+      // --- Legend toggle (smooth) ---
+      const legend = document.getElementById("legend");
+      const legendHeader = document.getElementById("legendHeader");
+      const legendContent = document.getElementById("legendContent");
       function collapseLegend() {
-        // 1) фиксируем текущую высоту как старт
         legendContent.style.height = legendContent.scrollHeight + "px";
-        // 2) следующий кадр — до 0 + класс
-        requestAnimationFrame(() => {
-          legend.classList.add("collapsed");
-          legendContent.style.height = "0px";
-        });
+        requestAnimationFrame(() => { legend.classList.add("collapsed"); legendContent.style.height = "0px"; });
       }
-
       function expandLegend() {
-        // 1) подготовка: высота 0, снимаем класс
-        legendContent.style.height = "0px";
-        legend.classList.remove("collapsed");
-        // 2) следующий кадр — к полной высоте
-        requestAnimationFrame(() => {
-          legendContent.style.height = legendContent.scrollHeight + "px";
-        });
-        // 3) очистка inline-стиля после окончания анимации
-        const onEnd = (e) => {
-          if (e.propertyName === "height") {
-            legendContent.style.height = "auto";
-            legendContent.removeEventListener("transitionend", onEnd);
-          }
-        };
+        legendContent.style.height = "0px"; legend.classList.remove("collapsed");
+        requestAnimationFrame(() => { legendContent.style.height = legendContent.scrollHeight + "px"; });
+        const onEnd = (e) => { if (e.propertyName === "height") { legendContent.style.height = "auto"; legendContent.removeEventListener("transitionend", onEnd); } };
         legendContent.addEventListener("transitionend", onEnd);
       }
-
       legendHeader.addEventListener("click", () => {
         const isCollapsed = legend.classList.contains("collapsed");
-        if (isCollapsed) expandLegend();
-        else collapseLegend();
+        if (isCollapsed) expandLegend(); else collapseLegend();
+      });
+      window.addEventListener("load", () => {
+        if (legend.classList.contains("collapsed")) legendContent.style.height = "0px";
+        else legendContent.style.height = "auto";
       });
 
-      // Стартовое состояние (по желанию можно добавить класс 'collapsed' в HTML)
-      window.addEventListener("load", () => {
-        if (legend.classList.contains("collapsed")) {
-          legendContent.style.height = "0px";
-        } else {
-          legendContent.style.height = "auto";
-        }
+      // --- Footer panel toggle (smooth) ---
+      const footerPanel  = document.getElementById('footerPanel');
+      const footerHeader = document.getElementById('footerHeader');
+      const footerContent = document.getElementById('footerContent');
+      function collapseFooter() {
+        footerContent.style.height = footerContent.scrollHeight + 'px';
+        requestAnimationFrame(() => { footerPanel.classList.add('collapsed'); footerContent.style.height = '0px'; });
+      }
+      function expandFooter() {
+        footerContent.style.height = '0px'; footerPanel.classList.remove('collapsed');
+        requestAnimationFrame(() => { footerContent.style.height = footerContent.scrollHeight + 'px'; });
+        const onEnd = (e) => { if (e.propertyName === 'height') { footerContent.style.height = 'auto'; footerContent.removeEventListener('transitionend', onEnd); } };
+        footerContent.addEventListener('transitionend', onEnd);
+      }
+      footerHeader.addEventListener('click', () => {
+        const isCollapsed = footerPanel.classList.contains('collapsed');
+        if (isCollapsed) expandFooter(); else collapseFooter();
+      });
+      window.addEventListener('load', () => {
+        if (footerPanel.classList.contains('collapsed')) footerContent.style.height = '0px';
+        else footerContent.style.height = 'auto';
       });
     </script>
   </body>
