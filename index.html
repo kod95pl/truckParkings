@@ -5,59 +5,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Truck Drivers Map — TruckWork</title>
 
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      crossorigin=""
-    />
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"
-    />
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
-    />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+    <!-- Turf (OSM fill) -->
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+
+    <!-- MVT for PTV vector tiles -->
+    <script src="https://unpkg.com/leaflet.vectorgrid/dist/Leaflet.VectorGrid.bundled.js"></script>
 
     <style>
       html, body, #map { height: 100%; margin: 0; }
-
       .topbar {
-        position: absolute;
-        z-index: 1000;
-        top: 10px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: calc(100% - 20px);
-        max-width: 980px;
-        background: rgba(255, 255, 255, 0.9);
-        padding: 8px 10px;
-        border-radius: 10px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        align-items: center;
-        font: 14px/1.3 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        position: absolute; z-index: 1000; top: 10px; left: 50%; transform: translateX(-50%);
+        width: calc(100% - 20px); max-width: 1100px;
+        background: rgba(255,255,255,.92); padding: 8px 10px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.1);
+        display: grid; grid-template-columns: auto auto 1fr auto; gap: 8px; align-items: center;
+        font: 14px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       }
+      .topbar .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
       .topbar button { border: 1px solid #ddd; padding: 6px 10px; border-radius: 8px; background: #fff; cursor: pointer; }
       .topbar input[type="number"] { width: 80px; padding: 4px 6px; }
       .checkboxes { display: flex; gap: 10px; flex-wrap: wrap; }
-      .checkboxes label { display: flex; align-items: center; gap: 6px; }
+      .checkboxes label { display: flex; align-items: center; gap: 6px; white-space:nowrap; }
 
       .legend {
-        position: absolute;
-        left: 10px;
-        bottom: 10px;
-        z-index: 1000;
-        background: rgba(255, 255, 255, 0.92);
-        border-radius: 10px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        font: 13px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-        padding: 10px;
+        position: absolute; left: 10px; bottom: 10px; z-index: 1000;
+        background: rgba(255,255,255,.92); border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.1);
+        font: 13px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 10px;
       }
       .dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; border: 2px solid #333; margin-right: 6px; }
       .dot.blue{background:#89b5ff;border-color:#2b6cff;}
@@ -65,12 +43,18 @@
       .dot.orange{background:#ffd3a1;border-color:#c76a00;}
       .dot.gray{background:#e2e2e2;border-color:#666;}
       .dot.red{background:#ffb3b3;border-color:#d70000;}
-      .dot.dual {
-        background: linear-gradient(135deg, #b8f7b1 50%, #89b5ff 50%);
+      .dot.dual{background:linear-gradient(135deg,#b8f7b1 50%,#89b5ff 50%);}
+      .dot.dual.shower{box-shadow:0 0 5px 2px #00c3ff;}
+
+      .popup-list{margin:6px 0 0; padding-left:18px;}
+      .popup-list li{margin:2px 0;}
+      .shield{
+        width:22px;height:22px;border-radius:6px;border:2px solid #900;
+        background:#fff; display:inline-flex; align-items:center; justify-content:center; font-weight:700;
+        color:#900; font-size:12px; line-height:1;
+        box-shadow:0 1px 4px rgba(0,0,0,.25);
       }
-      .dot.dual.shower {
-        box-shadow: 0 0 5px 2px #00c3ff;
-      }
+      .shield.small{width:18px;height:18px;font-size:10px;border-radius:5px;}
     </style>
   </head>
 
@@ -78,17 +62,39 @@
     <div id="map"></div>
 
     <div class="topbar">
-      <strong>Радиус (км)</strong>
-      <input id="radiusKm" type="number" value="50" min="5" max="300" step="5" />
-      <div class="checkboxes">
+      <div class="row">
+        <strong>Радиус (км)</strong>
+        <input id="radiusKm" type="number" value="50" min="5" max="300" step="5" />
+      </div>
+
+      <div class="row checkboxes">
         <label><input type="checkbox" id="cbTruck" checked /> TIR-паркинги</label>
         <label><input type="checkbox" id="cbFuel" checked /> Заправки</label>
         <label><input type="checkbox" id="cbMotel" checked /> Мотели</label>
         <label><input type="checkbox" id="cbIndustrial" checked /> Промзоны</label>
-        <label><input type="checkbox" id="cbNoGo" checked /> Красные зоны</label>
       </div>
-      <button id="btnLocate">Моё местоположение</button>
-      <button id="btnReload">Обновить</button>
+
+      <div class="row checkboxes">
+        <label title="PTV Truck Restrictions"><input type="checkbox" id="cbPTV" checked /> Ограничения PTV (линии+шилды)</label>
+        <label title="Сплошная заливка по OSM"><input type="checkbox" id="cbFill" /> Заливка (OSM)</label>
+        <!-- Фильтры типов -->
+        <span>Фильтры:</span>
+        <label><input type="checkbox" class="flt" value="height" checked />Высота</label>
+        <label><input type="checkbox" class="flt" value="weight" checked />Масса</label>
+        <label><input type="checkbox" class="flt" value="width" checked />Ширина</label>
+        <label><input type="checkbox" class="flt" value="length" checked />Длина</label>
+        <label><input type="checkbox" class="flt" value="axle" checked />Осевая</label>
+        <label><input type="checkbox" class="flt" value="general" checked />Общий запрет</label>
+        <label><input type="checkbox" class="flt" value="trailer" checked />С прицепом</label>
+        <label><input type="checkbox" class="flt" value="delivery" checked />Только доставка</label>
+        <label><input type="checkbox" class="flt" value="hazmat" checked />ADR</label>
+        <label><input type="checkbox" class="flt" value="tunnel" checked />Туннели</label>
+      </div>
+
+      <div class="row">
+        <button id="btnLocate">Моё местоположение</button>
+        <button id="btnReload">Обновить</button>
+      </div>
     </div>
 
     <div class="legend">
@@ -97,33 +103,33 @@
       <div><span class="dot dual shower"></span>Заправка с душем</div>
       <div><span class="dot orange"></span>Мотель / отель</div>
       <div><span class="dot gray"></span>Промзона</div>
-      <div><span class="dot red"></span>Красная зона</div>
+      <div><span class="dot red"></span>Красные зоны</div>
     </div>
 
     <script>
+      // ====== BASE MAP ======
       const map = L.map("map", { zoomSnap: 0.5 }).setView([52.23, 21.01], 6);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" }).addTo(map);
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 18,
-        attribution: "&copy; OpenStreetMap contributors",
-      }).addTo(map);
-
-      // === LAYERS ===
+      // ====== LAYERS ======
       const clusterTruck = L.markerClusterGroup({ disableClusteringAtZoom: 13 });
       const clusterFuel = L.markerClusterGroup({ disableClusteringAtZoom: 13 });
       const clusterMotel = L.markerClusterGroup({ disableClusteringAtZoom: 13 });
       const industrialLayer = L.layerGroup();
-      const noGoLayer = L.geoJSON(null, { style: { color: "#d70000", weight: 2, fillColor: "#ff4d4d", fillOpacity: 0.25 } });
+      const noGoOSMLayer = L.geoJSON(null, { style: { color: "#d70000", weight: 1, fillColor: "#ff4d4d", fillOpacity: 0.25 } });
+      const shieldLayer = L.layerGroup(); // для иконок-шилдов
 
-      [clusterTruck, clusterFuel, clusterMotel, industrialLayer, noGoLayer].forEach(l => map.addLayer(l));
+      [clusterTruck, clusterFuel, clusterMotel, industrialLayer, noGoOSMLayer, shieldLayer].forEach(l => map.addLayer(l));
 
-      // === ICONS ===
+      // ====== ICONS ======
       const iconTruck = color => L.divIcon({ className: "marker", html:`<span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:${color};border:2px solid #333"></span>`, iconSize:[16,16], iconAnchor:[8,8]});
       const iconDual = shower => L.divIcon({ className: "marker", html:`<span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:linear-gradient(135deg,#b8f7b1 50%,#89b5ff 50%);border:2px solid #333;${shower?'box-shadow:0 0 6px 2px #00c3ff':''}"></span>`, iconSize:[16,16], iconAnchor:[8,8]});
+      const shieldIcon = (txt, small=false) => L.divIcon({ className: small?'shield small':'shield', html: txt, iconSize: small?[18,18]:[22,22], iconAnchor: small?[9,9]:[11,11] });
 
-      // === HELPERS ===
+      // ====== HELPERS ======
       const overpass = q => fetch("https://overpass-api.de/api/interpreter?data="+encodeURIComponent(q)).then(r=>r.json());
       const radiusM = () => Math.min(300000, Math.max(5000, +document.getElementById("radiusKm").value*1000));
+      const getFilters = () => Array.from(document.querySelectorAll('.flt')).filter(i=>i.checked).map(i=>i.value);
 
       const popupFromTags = (t, type) => {
         const name = t.name || "Без названия";
@@ -142,7 +148,7 @@
         return null;
       }
 
-      // === LOADERS ===
+      // ====== OSM LOADERS ======
       async function loadTruck(lat,lon){
         if(!document.getElementById("cbTruck").checked) return;
         clusterTruck.clearLayers();
@@ -152,9 +158,8 @@
          node["highway"~"^(services|rest_area)$"](around:${radiusM()},${lat},${lon});
         );out center tags;`;
         const data = await overpass(q);
-        data.elements.forEach(el=>{
-          const p = toLatLng(el);
-          if(!p) return;
+        (data.elements||[]).forEach(el=>{
+          const p = toLatLng(el); if(!p) return;
           const m = L.marker(p,{icon:iconTruck("#89b5ff")}).bindPopup(popupFromTags(el.tags,"truck"));
           clusterTruck.addLayer(m);
         });
@@ -169,7 +174,7 @@
         );out center tags;`;
         const data = await overpass(q);
         const trucks = clusterTruck.getLayers().map(m=>m.getLatLng());
-        data.elements.forEach(el=>{
+        (data.elements||[]).forEach(el=>{
           const p = toLatLng(el); if(!p) return;
           const t = el.tags||{};
           const nearTruck = trucks.some(tp => map.distance(tp,p)<150);
@@ -188,7 +193,7 @@
          way["tourism"~"^(motel|hotel)$"](around:${radiusM()},${lat},${lon});
         );out center tags;`;
         const data = await overpass(q);
-        data.elements.forEach(el=>{
+        (data.elements||[]).forEach(el=>{
           const p = toLatLng(el); if(!p) return;
           const m = L.marker(p,{icon:iconTruck("#ffd3a1")}).bindPopup(popupFromTags(el.tags,"motel"));
           clusterMotel.addLayer(m);
@@ -204,7 +209,7 @@
         );out geom;`;
         const data = await overpass(q);
         const trucks = clusterTruck.getLayers().map(m=>m.getLatLng());
-        data.elements.forEach(el=>{
+        (data.elements||[]).forEach(el=>{
           if(!el.geometry) return;
           const c = el.geometry[Math.floor(el.geometry.length/2)];
           const nearTruck = trucks.some(tp=>map.distance(tp,[c.lat,c.lon])<250);
@@ -215,97 +220,192 @@
         });
       }
 
-      async function loadNoGo(lat, lon) {
-        if (!document.getElementById("cbNoGo").checked) return;
-        noGoLayer.clearLayers();
-      
+      // ====== PTV TRUCK RESTRICTIONS (LINES + CLICKS + SHIELDS) ======
+      const PTV_API_KEY = "RVVfZDhhMTljODNhMmYxNGQ2MWEyOGY1NDBmODA3OTIwMDA6OGRlN2YzZTItOTg4Ni00ZGIwLWFjYjAtZGM0ZmJhOGJlOGY4";
+      const PTV_URL_TEMPLATE = "https://api.myptv.com/maps/overlays/v1/vector-tiles/{z}/{x}/{y}?layers=truckRestrictions&apiKey="+encodeURIComponent(PTV_API_KEY);
+      let ptvLayer = null;
+
+      // сопоставление restriction_type → фильтр
+      function mapTypeToFilter(rt) {
+        // по документации
+        if (rt === 1) return "height";
+        if (rt === 2) return "weight";           // 2 и subtype 1 — permitted weight, оставим под weight
+        if (rt === 3) return "width";
+        if (rt === 4) return "length";
+        if (rt === 5) return "axle";
+        if (rt === 7) return "length";
+        if (rt >= 8 && rt <= 11) return "tunnel";
+        if (rt === 12 || rt === 13 || rt === 14) return "hazmat";
+        if (rt === 15) return "general";
+        if (rt === 16) return "trailer";
+        if (rt === 17) return "length";
+        if (rt === 18) return "width";
+        if (rt === 19 || rt === 20) return "delivery";
+        if (rt === -1) return "general"; // combined — показываем всегда, отфильтруем по inner-составу нельзя, оставим как общий
+        return "general";
+      }
+
+      function ptvLineStyle(props) {
+        const cat = props.display_category; // 1..3
+        const oneWay = (props.closure_direction === 2 || props.closure_direction === 3);
+        const base = cat === 1 ? 5 : (cat === 2 ? 4 : 3);
+        return {
+          color: "rgba(220,50,80,1)",
+          weight: base,
+          opacity: 1,
+          dashArray: oneWay ? "6,6" : null,
+          lineCap: "round",
+          lineJoin: "round"
+        };
+      }
+
+      function humanRestriction(props) {
+        let desc = null, times = [];
+        try {
+          const sd = props.structured_descriptions;
+          if (sd && sd.length) {
+            desc = sd[0].description || null;
+            times = Array.isArray(sd[0].time_domain_descriptions) ? sd[0].time_domain_descriptions : [];
+          }
+        } catch(_) {}
+        if (!desc && props.restriction_type_description) desc = props.restriction_type_description;
+
+        const toM = v => (v!=null ? (v/100).toFixed(2)+" m" : null);
+        const toT = v => (v!=null ? (v/1000).toFixed(1)+" t" : null);
+
+        const lines = [];
+        if (props.height != null) lines.push("Высота: " + toM(props.height));
+        if (props.width != null)  lines.push("Ширина: " + toM(props.width));
+        if (props.length != null) lines.push("Длина: " + toM(props.length));
+        if (props.weight != null) lines.push("Масса: " + toT(props.weight));
+        if (props["permitted weight"] != null) lines.push("Разрешённая масса: " + toT(props["permitted weight"]));
+        if (props.axle_load != null) lines.push("Нагрузка на ось: " + toT(props.axle_load));
+        if (props.number_of_axles != null) lines.push("Число осей: " + props.number_of_axles);
+
+        let html = `<div style="min-width:240px"><b>Ограничение для грузовиков</b>`;
+        if (desc) html += `<div>${desc}</div>`;
+        if (times.length) html += `<ul class="popup-list">${times.map(t=>`<li>${t}</li>`).join("")}</ul>`;
+        if (lines.length) html += `<div style="margin-top:6px">${lines.join("<br>")}</div>`;
+        if (props.iso_country_code) html += `<div style="margin-top:6px;opacity:.7">Страна: ${props.iso_country_code}</div>`;
+        html += `</div>`;
+        return html;
+      }
+
+      function shieldTextByType(rt) {
+        // простые метки: H (height), Wt, Wd, L, Ax, ADR, T (tunnel), TR (trailer), D (delivery), G (general)
+        if (rt === 1) return "H";
+        if (rt === 2) return "Wt";
+        if (rt === 3) return "Wd";
+        if (rt === 4) return "L";
+        if (rt === 5) return "Ax";
+        if (rt === 7) return "L";
+        if (rt >= 8 && rt <= 11) return "T";
+        if (rt === 12 || rt === 13 || rt === 14) return "ADR";
+        if (rt === 15) return "G";
+        if (rt === 16) return "TR";
+        if (rt === 17) return "L";
+        if (rt === 18) return "Wd";
+        if (rt === 19 || rt === 20) return "D";
+        if (rt === -1) return "•";
+        return "?";
+      }
+
+      function addPTVLayer() {
+        const filters = new Set(getFilters());
+        if (ptvLayer) { map.removeLayer(ptvLayer); ptvLayer = null; }
+
+        ptvLayer = L.vectorGrid.protobuf(PTV_URL_TEMPLATE, {
+          interactive: true,
+          maxNativeZoom: 18,
+          minZoom: 6,
+          rendererFactory: L.canvas.tile,
+          vectorTileLayerStyles: {
+            truckRestrictions: f => {
+              // фильтр по типу
+              const rt = f.properties.restriction_type;
+              const group = mapTypeToFilter(rt);
+              if (!filters.has(group)) return { opacity: 0 }; // скрываем
+              return ptvLineStyle(f.properties);
+            }
+          }
+        })
+        .on('click', e => {
+          const p = e.layer.properties || {};
+          // попап
+          L.popup({ maxWidth: 340 }).setLatLng(e.latlng).setContent(humanRestriction(p)).openOn(map);
+          // шилд в точке клика
+          const txt = shieldTextByType(p.restriction_type);
+          const m = L.marker(e.latlng, { icon: shieldIcon(txt) }).addTo(shieldLayer);
+          // автоудаление через 90 сек., чтобы не заспамить карту
+          setTimeout(()=> shieldLayer.removeLayer(m), 90000);
+        });
+
+        map.addLayer(ptvLayer);
+      }
+
+      function removePTVLayer() {
+        if (ptvLayer) { map.removeLayer(ptvLayer); ptvLayer = null; }
+        shieldLayer.clearLayers();
+      }
+
+      // ====== OSM FILL (сплошная заливка) ======
+      async function loadNoGoFillOSM(lat, lon) {
+        noGoOSMLayer.clearLayers();
         const q = `[out:json][timeout:40];
         (
           way["hgv"~"^(no|destination|delivery)$"](around:${radiusM()},${lat},${lon});
           way["access"="no"](around:${radiusM()},${lat},${lon});
           way["motor_vehicle"="no"](around:${radiusM()},${lat},${lon});
-          way["maxweight"](around:${radiusM()},${lat},${lon});        // весовые ограничения
+          way["maxweight"](around:${radiusM()},${lat},${lon});
           way["maxaxleload"](around:${radiusM()},${lat},${lon});
-          way["maxheight"](around:${radiusM()},${lat},${lon});        // габариты (можно включить по желанию)
-          // если где-то размечены зоны:
-          relation["zone:hgv"](around:${radiusM()},${lat},${lon});
-          relation["access"="no"](around:${radiusM()},${lat},${lon});
+          way["maxheight"](around:${radiusM()},${lat},${lon});
         );
         out geom tags;`;
-      
         const data = await overpass(q);
-      
-        // 1) собираем буферы для линий и полигоны как есть
+
         const features = [];
-      
         (data.elements || []).forEach(el => {
           if (!el.geometry) return;
-      
-          // Для замкнутых ways с площадью — сразу делаем Polygon
           const isClosed = el.type === "way" &&
-                           el.geometry.length > 3 &&
-                           el.geometry[0].lat === el.geometry[el.geometry.length - 1].lat &&
-                           el.geometry[0].lon === el.geometry[el.geometry.length - 1].lon;
-      
+            el.geometry.length > 3 &&
+            el.geometry[0].lat === el.geometry[el.geometry.length - 1].lat &&
+            el.geometry[0].lon === el.geometry[el.geometry.length - 1].lon;
+
           if (isClosed) {
             const ring = el.geometry.map(g => [g.lon, g.lat]);
+            try { features.push(turf.polygon([ring], { d: 1 })); } catch (_) {}
+          } else {
+            const coords = el.geometry.map(g => [g.lon, g.lat]);
+            const line = turf.lineString(coords);
             try {
-              features.push(turf.polygon([ring], { d: 1 }));
+              const buf = turf.buffer(line, 0.05, { units: "kilometers" }); // ~50 м
+              if (buf) { buf.properties = { d: 1 }; features.push(buf); }
             } catch (_) {}
-            return;
           }
-      
-          // Иначе — это линейные ограничения: буферим линию
-          const coords = el.geometry.map(g => [g.lon, g.lat]);
-          const line = turf.lineString(coords);
-          try {
-            // ширину буфера можешь подправить (сейчас 50 м)
-            const buf = turf.buffer(line, 0.05, { units: "kilometers" });
-            if (buf) {
-              // ставим одинаковое свойство — нужно для dissolve
-              buf.properties = { d: 1 };
-              features.push(buf);
-            }
-          } catch (_) {}
         });
-      
+
         if (!features.length) return;
-      
-        // 2) Dissolve: объединяем всё в одну (multi)полигональную геометрию
         let dissolved;
-        try {
-          const fc = turf.featureCollection(features);
-          // dissolve объединяет по значению свойства; у нас у всех d=1
-          dissolved = turf.dissolve(fc, { propertyName: "d" });
-        } catch (e) {
-          // fallback: попарный union, если вдруг у CDN-версии нет dissolve
-          dissolved = features.reduce((acc, f) => {
-            try { return acc ? turf.union(acc, f) : f; } catch (_) { return acc || f; }
-          }, null);
-        }
-      
+        try { dissolved = turf.dissolve(turf.featureCollection(features), { propertyName: "d" }); }
+        catch (_) { dissolved = features.reduce((acc, f) => { try { return acc ? turf.union(acc, f) : f; } catch { return acc || f; } }, null); }
         if (!dissolved) return;
-      
-        // 3) (необязательно) чуть упрощаем геометрию, чтобы рендер не задыхался
-        try {
-          dissolved = turf.truncate(dissolved, { precision: 6, coordinates: 2 });
-        } catch (_) {}
-      
-        // 4) Рисуем ОДНОЙ сплошной фигурой
-        L.geoJSON(dissolved, {
-          style: { color: "#d70000", weight: 1, fillColor: "#ff4d4d", fillOpacity: 0.25 }
-        }).addTo(noGoLayer);
+        try { dissolved = turf.truncate(dissolved, { precision: 6, coordinates: 2 }); } catch (_){}
+
+        L.geoJSON(dissolved, { style: { color: "#d70000", weight: 1, fillColor: "#ff4d4d", fillOpacity: 0.25 } }).addTo(noGoOSMLayer);
       }
 
-
+      // ====== LOAD ALL ======
       async function loadAll(lat,lon){
         await loadTruck(lat,lon);
         await loadFuel(lat,lon);
         await loadMotel(lat,lon);
         await loadIndustrial(lat,lon);
-        await loadNoGo(lat,lon);
+
+        if (document.getElementById("cbPTV").checked) addPTVLayer(); else removePTVLayer();
+        if (document.getElementById("cbFill").checked) await loadNoGoFillOSM(lat, lon); else noGoOSMLayer.clearLayers();
       }
 
+      // ====== GEOLOCATION / UI ======
       async function locateUser(){
         if(!navigator.geolocation) return null;
         return new Promise(res=>{
@@ -326,7 +426,20 @@
         const c = map.getCenter(); await loadAll(c.lat,c.lng);
       };
 
-      // Первичная загрузка
+      // переключатели
+      document.getElementById("cbPTV").addEventListener("change", async ()=>{
+        const c = map.getCenter(); await loadAll(c.lat,c.lng);
+      });
+      document.getElementById("cbFill").addEventListener("change", async ()=>{
+        const c = map.getCenter(); await loadAll(c.lat,c.lng);
+      });
+      document.querySelectorAll(".flt").forEach(cb=>{
+        cb.addEventListener("change", ()=>{
+          if (document.getElementById("cbPTV").checked) addPTVLayer(); // перестроить стиль по фильтрам
+        });
+      });
+
+      // ====== INIT ======
       (async ()=>{
         const c = map.getCenter();
         await loadAll(c.lat,c.lng);
