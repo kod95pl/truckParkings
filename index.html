@@ -3,12 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Drivers Map – TruckWork</title>
+    <title>Truck Drivers Map — TruckWork</title>
 
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
       crossorigin=""
     />
     <link
@@ -19,11 +18,13 @@
       rel="stylesheet"
       href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
     />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 
     <style>
       html, body, #map { height: 100%; margin: 0; }
 
-      /* ===== TOPBAR ===== */
       .topbar {
         position: absolute;
         z-index: 1000;
@@ -44,8 +45,9 @@
       }
       .topbar button { border: 1px solid #ddd; padding: 6px 10px; border-radius: 8px; background: #fff; cursor: pointer; }
       .topbar input[type="number"] { width: 80px; padding: 4px 6px; }
+      .checkboxes { display: flex; gap: 10px; flex-wrap: wrap; }
+      .checkboxes label { display: flex; align-items: center; gap: 6px; }
 
-      /* ===== ЛЕГЕНДА ===== */
       .legend {
         position: absolute;
         left: 10px;
@@ -55,520 +57,214 @@
         border-radius: 10px;
         box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         font: 13px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-        overflow: hidden;
-      }
-      .legend-header {
-        display: flex; justify-content: space-between; align-items: center;
-        padding: 10px; cursor: pointer; background: #f5f5f5; border-bottom: 1px solid #ddd;
-      }
-      .legend-header:hover { background: #eee; }
-      #legendToggle { font-size: 16px; transition: transform 0.3s ease; }
-      .legend.collapsed #legendToggle { transform: rotate(-90deg); }
-
-      .legend-content {
-        height: auto; opacity: 1; overflow: hidden;
-        transition: height 0.35s ease, opacity 0.25s ease;
         padding: 10px;
       }
-      .legend.collapsed .legend-content {
-        height: 0 !important; opacity: 0; padding-top: 0; padding-bottom: 0;
-      }
-
-      .legend .item { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
-      .dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; border: 2px solid #333; }
-      .dot.blue{background:#89b5ff;border-color:#2b6cff;} .dot.green{background:#b8f7b1;border-color:#2a7a2a;}
-      .dot.orange{background:#ffd3a1;border-color:#c76a00;} .dot.gray{background:#e2e2e2;border-color:#666;}
+      .dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; border: 2px solid #333; margin-right: 6px; }
+      .dot.blue{background:#89b5ff;border-color:#2b6cff;}
+      .dot.green{background:#b8f7b1;border-color:#2a7a2a;}
+      .dot.orange{background:#ffd3a1;border-color:#c76a00;}
+      .dot.gray{background:#e2e2e2;border-color:#666;}
       .dot.red{background:#ffb3b3;border-color:#d70000;}
-
-      /* ===== (опционально) СВОРАТЫВАЕМАЯ ПАНЕЛЬ ===== */
-      .footer-panel {
-        position: absolute;
-        right: 10px;
-        bottom: 10px;
-        z-index: 1000;
-        background: rgba(255, 255, 255, 0.92);
-        border-radius: 10px;
-        box-shadow: 0 2px 10px rgba(0,0,0,.1);
-        font: 12px/1.3 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-        overflow: hidden;
-        min-width: 220px;
+      .dot.dual {
+        background: linear-gradient(135deg, #b8f7b1 50%, #89b5ff 50%);
       }
-      .footer-header {
-        display: flex; align-items: center; justify-content: space-between; gap: 8px;
-        padding: 8px 10px; cursor: pointer; background: #f5f5f5; border-bottom: 1px solid #ddd;
+      .dot.dual.shower {
+        box-shadow: 0 0 5px 2px #00c3ff;
       }
-      .footer-header:hover { background: #eee; }
-      #footerToggle { font-size: 14px; transition: transform 0.3s ease; }
-      .footer-panel.collapsed #footerToggle { transform: rotate(-90deg); }
-      .footer-content {
-        height: auto; opacity: 1; overflow: hidden;
-        transition: height 0.35s ease, opacity 0.25s ease, padding 0.25s ease;
-        padding: 8px 10px;
-      }
-      .footer-panel.collapsed .footer-content {
-        height: 0 !important; opacity: 0; padding-top: 0; padding-bottom: 0;
-      }
-
-      .checkboxes { display: flex; gap: 10px; flex-wrap: wrap; }
-      .checkboxes label { display: flex; align-items: center; gap: 6px; }
     </style>
   </head>
 
   <body>
     <div id="map"></div>
 
-    <!-- TOPBAR -->
     <div class="topbar">
-      <strong>Радиус поиска (км)</strong>
+      <strong>Радиус (км)</strong>
       <input id="radiusKm" type="number" value="50" min="5" max="300" step="5" />
       <div class="checkboxes">
         <label><input type="checkbox" id="cbTruck" checked /> TIR-паркинги</label>
-        <label><input type="checkbox" id="cbFuel" checked /> Заправки c парковкой</label>
-        <label><input type="checkbox" id="cbMotel" checked /> Мотели/отели</label>
-        <label><input type="checkbox" id="cbIndustrial" /> Промзоны</label>
+        <label><input type="checkbox" id="cbFuel" checked /> Заправки</label>
+        <label><input type="checkbox" id="cbMotel" checked /> Мотели</label>
+        <label><input type="checkbox" id="cbIndustrial" checked /> Промзоны</label>
         <label><input type="checkbox" id="cbNoGo" checked /> Красные зоны</label>
       </div>
       <button id="btnLocate">Моё местоположение</button>
-      <button id="btnReload">Обновить точки</button>
+      <button id="btnReload">Обновить</button>
     </div>
 
-    <!-- ЛЕГЕНДА -->
-    <div class="legend" id="legend">
-      <div class="legend-header" id="legendHeader">
-        <strong>Обозначения</strong>
-        <span id="legendToggle">▼</span>
-      </div>
-      <div class="legend-content" id="legendContent">
-        <div class="item"><span class="dot blue"></span> TIR-паркинг</div>
-        <div class="item"><span class="dot green"></span> Заправка с парковкой</div>
-        <div class="item"><span class="dot orange"></span> Мотель / отель</div>
-        <div class="item"><span class="dot gray"></span> Промзона</div>
-        <div class="item"><span class="dot red"></span> Красная зона (нельзя заезжать)</div>
-      </div>
+    <div class="legend">
+      <div><span class="dot blue"></span>TIR-паркинг</div>
+      <div><span class="dot dual"></span>Заправка с парковкой</div>
+      <div><span class="dot dual shower"></span>Заправка с душем</div>
+      <div><span class="dot orange"></span>Мотель / отель</div>
+      <div><span class="dot gray"></span>Промзона</div>
+      <div><span class="dot red"></span>Красная зона</div>
     </div>
-
-    <!-- (опционально) СВОРАТЫВАЕМАЯ ПАНЕЛЬ, чтобы не падали обработчики -->
-    <div class="footer-panel" id="footerPanel">
-      <div class="footer-header" id="footerHeader">
-        <strong>Подсказки</strong>
-        <span id="footerToggle">▼</span>
-      </div>
-      <div class="footer-content" id="footerContent">
-        Масштабируйте или перетаскивайте карту — точки будут подгружаться по текущим границам.
-      </div>
-    </div>
-
-    <script
-      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-      crossorigin=""
-    ></script>
-    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
     <script>
-      // --- Base Map ---
-      const map = L.map("map", { zoomSnap: 0.5, worldCopyJump: true })
-        .setView([52.2297, 21.0122], 5);
+      const map = L.map("map", { zoomSnap: 0.5 }).setView([52.23, 21.01], 6);
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+        maxZoom: 18,
+        attribution: "&copy; OpenStreetMap contributors",
       }).addTo(map);
 
-      // --- Icons ---
-      function circleMarker(color) {
-        return L.divIcon({
-          className: "custom-marker",
-          html: `<span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:${color};border:2px solid #333"></span>`,
-          iconSize: [16, 16], iconAnchor: [8, 8],
-        });
-      }
-      const ICONS = {
-        truck: circleMarker("#89b5ff"),
-        fuel: circleMarker("#b8f7b1"),
-        motel: circleMarker("#ffd3a1"),
-        industrial: circleMarker("#e2e2e2"),
-      };
-
-      // --- Layers ---
+      // === LAYERS ===
       const clusterTruck = L.markerClusterGroup({ disableClusteringAtZoom: 13 });
-      const clusterFuel  = L.markerClusterGroup({ disableClusteringAtZoom: 13 });
+      const clusterFuel = L.markerClusterGroup({ disableClusteringAtZoom: 13 });
       const clusterMotel = L.markerClusterGroup({ disableClusteringAtZoom: 13 });
       const industrialLayer = L.layerGroup();
-      const noGoLayer = L.geoJSON(null, {
-        style: { color: "#d70000", weight: 2, fillColor: "#ff4d4d", fillOpacity: 0.25 }
-      });
+      const noGoLayer = L.geoJSON(null, { style: { color: "#d70000", weight: 2, fillColor: "#ff4d4d", fillOpacity: 0.25 } });
 
-      clusterTruck.addTo(map);
-      clusterFuel.addTo(map);
-      clusterMotel.addTo(map);
-      industrialLayer.addTo(map);
-      noGoLayer.addTo(map);
+      [clusterTruck, clusterFuel, clusterMotel, industrialLayer, noGoLayer].forEach(l => map.addLayer(l));
 
-      // --- User location ---
-      let userMarker = null; let userCircle = null;
-      function setUserLocation(lat, lon) {
-        if (userMarker) map.removeLayer(userMarker);
-        if (userCircle) map.removeLayer(userCircle);
-        userMarker = L.marker([lat, lon], { title: "Вы здесь" }).addTo(map).bindPopup("Ваше местоположение");
-        userCircle = L.circle([lat, lon], { radius: 30, color: "#2b6cff", weight: 2 }).addTo(map);
-      }
-      function locateUser() {
-        return new Promise((resolve) => {
-          if (!navigator.geolocation) return resolve(null);
-          navigator.geolocation.getCurrentPosition(
-            (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
-            () => resolve(null),
-            { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
-          );
-        });
-      }
+      // === ICONS ===
+      const iconTruck = color => L.divIcon({ className: "marker", html:`<span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:${color};border:2px solid #333"></span>`, iconSize:[16,16], iconAnchor:[8,8]});
+      const iconDual = shower => L.divIcon({ className: "marker", html:`<span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:linear-gradient(135deg,#b8f7b1 50%,#89b5ff 50%);border:2px solid #333;${shower?'box-shadow:0 0 6px 2px #00c3ff':''}"></span>`, iconSize:[16,16], iconAnchor:[8,8]});
 
-      // --- Overpass helpers ---
-      const OP_URL = "https://overpass-api.de/api/interpreter";
-      function overpassFetch(query) {
-        const url = OP_URL + "?data=" + encodeURIComponent(query);
-        return fetch(url).then((r) => r.json());
-      }
+      // === HELPERS ===
+      const overpass = q => fetch("https://overpass-api.de/api/interpreter?data="+encodeURIComponent(q)).then(r=>r.json());
+      const radiusM = () => Math.min(300000, Math.max(5000, +document.getElementById("radiusKm").value*1000));
+
+      const popupFromTags = (t, type) => {
+        const name = t.name || "Без названия";
+        let s = `<b>${name}</b><br>`;
+        if (t.operator) s += `${t.operator}<br>`;
+        if (t.brand) s += `Бренд: ${t.brand}<br>`;
+        if (t.amenity === "fuel" && t.shower === "yes") s += "🚿 Душ доступен<br>";
+        if (type==="fuel" && t.opening_hours) s += `⏰ ${t.opening_hours}<br>`;
+        if (t.website) s += `<a href="${t.website}" target="_blank">Сайт</a>`;
+        return s;
+      };
+
       function toLatLng(el) {
         if (el.type === "node") return [el.lat, el.lon];
         if (el.center) return [el.center.lat, el.center.lon];
         return null;
       }
-      function elemName(tags = {}) { return tags.name || tags.ref || "Без названия"; }
-      function popupFromTags(tags = {}) {
-        const name = elemName(tags);
-        const addr = [tags["addr:street"], tags["addr:housenumber"], tags["addr:city"]].filter(Boolean).join(" ");
-        const brand = tags.brand ? `<div><strong>Бренд:</strong> ${tags.brand}</div>` : "";
-        const phone = tags.phone ? `<div><strong>Тел.:</strong> ${tags.phone}</div>` : "";
-        const website = tags.website ? `<div><a href="${tags.website}" target="_blank" rel="noopener">Сайт</a></div>` : "";
-        return `<div style="min-width:200px"><strong>${name}</strong>${addr?`<div>${addr}</div>`:""}${brand}${phone}${website}</div>`;
-      }
-      function radiusMeters() {
-        const km = parseFloat(document.getElementById("radiusKm").value) || 50;
-        return Math.max(5000, Math.min(300000, km * 1000));
-      }
-      function buildQuery(lat, lon, r) {
-        const qTruck = `(
-          node["amenity"="parking"]["parking"="truck"](around:${r},${lat},${lon});
-          way["amenity"="parking"]["parking"="truck"](around:${r},${lat},${lon});
-          relation["amenity"="parking"]["parking"="truck"](around:${r},${lat},${lon});
-        );`;
-        const qFuel = `(
-          node["amenity"="fuel"](around:${r},${lat},${lon});
-          way["amenity"="fuel"](around:${r},${lat},${lon});
-          relation["amenity"="fuel"](around:${r},${lat},${lon});
-        );`;
-        const qMotel = `(
-          node["tourism"~"^(motel|hotel)$"](around:${r},${lat},${lon});
-          way["tourism"~"^(motel|hotel)$"](around:${r},${lat},${lon});
-          relation["tourism"~"^(motel|hotel)$"](around:${r},${lat},${lon});
-        );`;
-        const qIndustrial = `(
-          way["landuse"="industrial"](around:${r},${lat},${lon});
-          relation["landuse"="industrial"](around:${r},${lat},${lon});
-        );`;
-        return `
-          [out:json][timeout:50];
-          (
-            ${document.getElementById("cbTruck").checked ? qTruck : ""}
-            ${document.getElementById("cbFuel").checked  ? qFuel  : ""}
-            ${document.getElementById("cbMotel").checked ? qMotel : ""}
-            ${document.getElementById("cbIndustrial").checked ? qIndustrial : ""}
-          );
-          out center tags;
-        `;
-      }
 
-      // ===== MapTrip Truck Parking (HappyTrucker / Bosch / Toll Collect) =====
-      const MAPTRIP_BASE  = "https://api.maptrip.de"; // ← замени, если у тебя другой хост
-      const MAPTRIP_TOKEN = "YOUR_MAPTRIP_BEARER_TOKEN"; // ← вставь прод-токен
-      const USE_MAPTRIP_FOR_TRUCK = true; // отключить дубль из Overpass
-
-      // Подмена truck в buildQuery (чтобы не было дублей)
-      const _origBuildQuery = buildQuery;
-      function buildQueryPatched(lat, lon, r) {
-        if (!USE_MAPTRIP_FOR_TRUCK) return _origBuildQuery(lat, lon, r);
-        const q = _origBuildQuery(lat, lon, r)
-          .replace(/node\["amenity"="parking"\]\["parking"="truck"\]\(around:[^)]+\);\s*/g, "")
-          .replace(/way\["amenity"="parking"\]\["parking"="truck"\]\(around:[^)]+\);\s*/g, "")
-          .replace(/relation\["amenity"="parking"\]\["parking"="truck"\]\(around:[^)]+\);\s*/g, "");
-        return q;
-      }
-      // переназначаем глобально
-      buildQuery = buildQueryPatched;
-
-      // Цвет/иконка по live-статусу (Toll Collect)
-      function occupancyToColor(status) {
-        switch (status) {
-          case "SPACES_AVAILABLE": return "#2ecc71"; // зелёный
-          case "ALMOST_FULL":      return "#f39c12"; // оранжевый
-          case "FULL":             return "#e74c3c"; // красный
-          default:                 return "#89b5ff"; // синий по умолч.
-        }
-      }
-      function truckIcon(color) {
-        return L.divIcon({
-          className: "custom-marker",
-          html: `<span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:${color};border:2px solid #333"></span>`,
-          iconSize: [16, 16], iconAnchor: [8, 8],
+      // === LOADERS ===
+      async function loadTruck(lat,lon){
+        if(!document.getElementById("cbTruck").checked) return;
+        clusterTruck.clearLayers();
+        const q = `[out:json][timeout:40];
+        (node["amenity"="parking"]["parking"="truck"](around:${radiusM()},${lat},${lon});
+         way["amenity"="parking"]["parking"="truck"](around:${radiusM()},${lat},${lon});
+         node["highway"~"^(services|rest_area)$"](around:${radiusM()},${lat},${lon});
+        );out center tags;`;
+        const data = await overpass(q);
+        data.elements.forEach(el=>{
+          const p = toLatLng(el);
+          if(!p) return;
+          const m = L.marker(p,{icon:iconTruck("#89b5ff")}).bindPopup(popupFromTags(el.tags,"truck"));
+          clusterTruck.addLayer(m);
         });
       }
 
-      // Вспомогалки MapTrip
-      function langHeader() {
-        const lang = (navigator.language || "en").split("-")[0];
-        return lang || "en";
-      }
-      function boundsToPathParams(bounds) {
-        // MapTrip ждёт from = west,south ; to = east,north (lon,lat)
-        const south = bounds.getSouth();
-        const west  = bounds.getWest();
-        const north = bounds.getNorth();
-        const east  = bounds.getEast();
-        const from = `${west},${south}`;
-        const to   = `${east},${north}`;
-        return { from, to };
-      }
-
-      // Попап для парковки
-      function popupForParkingFeature(f) {
-        const p = f.properties || {};
-        const addr = p.address
-          ? [p.address.street, p.address.housenumber, p.address.city, p.address.zipcode]
-              .filter(Boolean).join(", ")
-          : "";
-        const provider = p.provider ? `<div><strong>Провайдер:</strong> ${p.provider}</div>` : "";
-        const road     = p.road ? `<div><strong>Дорога:</strong> ${p.road}</div>` : "";
-        const spaces   = p.spaces ? `<div><strong>Мест:</strong> ${p.spaces}</div>` : "";
-        const occ      = p.occupancy ? `<div><strong>Занятость (live):</strong> ${p.occupancy.replace(/_/g," ")}</div>` : "";
-        const details  = p.details ? `<div style="margin-top:6px"><a href="${p.details}" target="_blank" rel="noopener">Подробнее / бронирование</a></div>` : "";
-        const images   = Array.isArray(p.images) && p.images.length
-          ? `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
-               ${p.images.slice(0,3).map(u=>`<img src="${u}" alt="" style="width:64px;height:48px;object-fit:cover;border-radius:4px;border:1px solid #ddd" />`).join("")}
-             </div>`
-          : "";
-
-        const name = p.name || "Truck parking";
-        return `<div style="min-width:220px">
-          <strong>${name}</strong>
-          ${addr ? `<div>${addr}</div>` : ""}
-          ${provider}${road}${spaces}${occ}
-          ${details}
-          ${images}
-        </div>`;
+      async function loadFuel(lat,lon){
+        if(!document.getElementById("cbFuel").checked) return;
+        clusterFuel.clearLayers();
+        const q = `[out:json][timeout:40];
+        (node["amenity"="fuel"](around:${radiusM()},${lat},${lon});
+         way["amenity"="fuel"](around:${radiusM()},${lat},${lon});
+        );out center tags;`;
+        const data = await overpass(q);
+        const trucks = clusterTruck.getLayers().map(m=>m.getLatLng());
+        data.elements.forEach(el=>{
+          const p = toLatLng(el); if(!p) return;
+          const t = el.tags||{};
+          const nearTruck = trucks.some(tp => map.distance(tp,p)<150);
+          const hasParking = t.parking==="yes"||t["parking:lanes"];
+          const hasShower = t.shower==="yes";
+          const m = L.marker(p,{icon:iconDual(hasShower)}).bindPopup(popupFromTags(t,"fuel"));
+          if(nearTruck||hasParking) clusterFuel.addLayer(m);
+        });
       }
 
-      // Загрузка парковок через MapTrip
-      async function loadTruckParkingsViaMapTrip() {
-        if (!document.getElementById("cbTruck").checked) {
-          clusterTruck.clearLayers();
-          return;
-        }
+      async function loadMotel(lat,lon){
+        if(!document.getElementById("cbMotel").checked) return;
+        clusterMotel.clearLayers();
+        const q = `[out:json][timeout:40];
+        (node["tourism"~"^(motel|hotel)$"](around:${radiusM()},${lat},${lon});
+         way["tourism"~"^(motel|hotel)$"](around:${radiusM()},${lat},${lon});
+        );out center tags;`;
+        const data = await overpass(q);
+        data.elements.forEach(el=>{
+          const p = toLatLng(el); if(!p) return;
+          const m = L.marker(p,{icon:iconTruck("#ffd3a1")}).bindPopup(popupFromTags(el.tags,"motel"));
+          clusterMotel.addLayer(m);
+        });
+      }
 
-        const b = map.getBounds();
-        const { from, to } = boundsToPathParams(b);
-
-        try {
-          clusterTruck.clearLayers();
-
-          const url = `${MAPTRIP_BASE}/poi/parking/${encodeURIComponent(from)}/${encodeURIComponent(to)}`;
-          const res = await fetch(url, {
-            headers: {
-              "Authorization": `Bearer ${MAPTRIP_TOKEN}`,
-              "Accept-Language": langHeader()
-            }
-          });
-
-          if (!res.ok) {
-            const txt = await res.text().catch(()=>res.statusText);
-            console.error("MapTrip error:", res.status, txt);
-            alert(`MapTrip parking API: ${res.status} ${txt || ""}`.trim());
-            return;
+      async function loadIndustrial(lat,lon){
+        if(!document.getElementById("cbIndustrial").checked) return;
+        industrialLayer.clearLayers();
+        const q = `[out:json][timeout:40];
+        (way["landuse"="industrial"](around:${radiusM()},${lat},${lon});
+         relation["landuse"="industrial"](around:${radiusM()},${lat},${lon});
+        );out geom;`;
+        const data = await overpass(q);
+        const trucks = clusterTruck.getLayers().map(m=>m.getLatLng());
+        data.elements.forEach(el=>{
+          if(!el.geometry) return;
+          const c = el.geometry[Math.floor(el.geometry.length/2)];
+          const nearTruck = trucks.some(tp=>map.distance(tp,[c.lat,c.lon])<250);
+          if(nearTruck){
+            const poly = L.polygon(el.geometry.map(g=>[g.lat,g.lon]),{color:"#666",weight:1,fillColor:"#999",fillOpacity:0.15});
+            industrialLayer.addLayer(poly);
           }
-
-          const geo = await res.json(); // FeatureCollection
-          const feats = Array.isArray(geo.features) ? geo.features : [];
-
-          feats.forEach(f => {
-            const [lon, lat] = (f.geometry && f.geometry.coordinates) || [];
-            if (typeof lat !== "number" || typeof lon !== "number") return;
-
-            const occColor = occupancyToColor(f.properties && f.properties.occupancy);
-            const marker = L.marker([lat, lon], { icon: truckIcon(occColor) })
-              .bindPopup(popupForParkingFeature(f));
-
-            clusterTruck.addLayer(marker);
-          });
-
-        } catch (e) {
-          console.error(e);
-          alert("Не удалось получить паркинги из MapTrip. Проверь ключ/доступ и попробуй ещё раз.");
-        }
+        });
       }
 
-      // --- No-go zones (demo) ---
-      const demoNoGo = {
-        type: "FeatureCollection",
-        features: [
-          { type: "Feature", properties: { name: "Примерная зона" },
-            geometry: { type: "Polygon", coordinates: [[[21.0,52.22],[21.02,52.22],[21.02,52.24],[21.0,52.24],[21.0,52.22]]] } }
-        ]
-      };
-      function loadNoGo() {
+      async function loadNoGo(lat,lon){
+        if(!document.getElementById("cbNoGo").checked) return;
         noGoLayer.clearLayers();
-        if (!document.getElementById("cbNoGo").checked) return;
-        noGoLayer.addData(demoNoGo);
-      }
-
-      // --- Utils ---
-      function distanceMeters(lat1, lon1, lat2, lon2) {
-        const R = 6371000, dLat=((lat2-lat1)*Math.PI)/180, dLon=((lon2-lon1)*Math.PI)/180;
-        const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
-        return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      }
-
-      // --- UI events ---
-      document.getElementById("btnLocate").addEventListener("click", async () => {
-        const loc = await locateUser();
-        if (loc) { setUserLocation(loc.lat, loc.lon); map.setView([loc.lat, loc.lon], 11); }
-        else { alert("Не удалось определить геолокацию в браузере."); }
-      });
-
-      document.getElementById("btnReload").addEventListener("click", async () => {
-        const center = userMarker ? userMarker.getLatLng() : map.getCenter();
-        await loadPOIs(center.lat, center.lng);     // Overpass: fuel/motel/industrial
-        await loadTruckParkingsViaMapTrip();        // MapTrip: truck parking
-        loadNoGo();
-      });
-
-      document.getElementById("cbTruck").addEventListener("change", async () => {
-        if (document.getElementById("cbTruck").checked) {
-          map.addLayer(clusterTruck);
-          await loadTruckParkingsViaMapTrip();
-        } else {
-          map.removeLayer(clusterTruck);
-        }
-      });
-      document.getElementById("cbFuel").addEventListener("change", () => {
-        if (document.getElementById("cbFuel").checked) map.addLayer(clusterFuel); else map.removeLayer(clusterFuel);
-      });
-      document.getElementById("cbMotel").addEventListener("change", () => {
-        if (document.getElementById("cbMotel").checked) map.addLayer(clusterMotel); else map.removeLayer(clusterMotel);
-      });
-      document.getElementById("cbIndustrial").addEventListener("change", () => {
-        if (document.getElementById("cbIndustrial").checked) map.addLayer(industrialLayer); else map.removeLayer(industrialLayer);
-      });
-      document.getElementById("cbNoGo").addEventListener("change", loadNoGo);
-
-      // Перезагрузка парковок при перемещении карты (debounce)
-      let mtDebounce;
-      map.on("moveend", () => {
-        clearTimeout(mtDebounce);
-        mtDebounce = setTimeout(() => {
-          loadTruckParkingsViaMapTrip();
-        }, 350);
-      });
-
-      // --- Init ---
-      async function loadPOIs(lat, lon) {
-        const r = radiusMeters();
-        const query = buildQuery(lat, lon, r);
-        clusterFuel.clearLayers(); clusterMotel.clearLayers(); industrialLayer.clearLayers();
-        try {
-          const data = await overpassFetch(query);
-          const nearbyParkings = []; // оставлено для логики "fuel рядом с truck", если пригодится
-
-          (data.elements || []).forEach((el) => {
-            const p = toLatLng(el); if (!p) return;
-            const tags = el.tags || {};
-            // truck в Overpass мы игнорируем (MapTrip), но массив nearbyParkings мог бы понадобиться — пропускаем
-            if (tags.amenity === "fuel") {
-              const hasParkingTag = (tags.parking === "yes" || tags["parking:lanes"]);
-              const nearTruckParking = nearbyParkings.some((pk) => distanceMeters(p[0], p[1], pk.lat, pk.lon) < 150);
-              if (hasParkingTag || nearTruckParking) {
-                const m = L.marker(p, { icon: ICONS.fuel }).bindPopup(popupFromTags(tags));
-                m.addTo(clusterFuel);
-              }
-            } else if (tags.tourism === "motel" || tags.tourism === "hotel") {
-              const m = L.marker(p, { icon: ICONS.motel }).bindPopup(popupFromTags(tags));
-              m.addTo(clusterMotel);
-            } else if (tags.landuse === "industrial") {
-              if (el.geometry) {
-                const latlngs = el.geometry.map((g) => [g.lat, g.lon]);
-                const poly = L.polygon(latlngs, { color: "#666", weight: 1, fillColor: "#999", fillOpacity: 0.15 });
-                poly.bindPopup(popupFromTags(tags)); poly.addTo(industrialLayer);
-              } else {
-                L.circle(p, { radius: 80, color: "#666", weight: 1, fillColor: "#999", fillOpacity: 0.15 })
-                  .addTo(industrialLayer);
-              }
-            }
-          });
-        } catch (err) {
-          console.error(err);
-          alert("Не удалось загрузить точки из Overpass. Попробуйте уменьшить радиус или повторить позже.");
-        }
-      }
-
-      // --- Legend toggle (smooth) ---
-      const legend = document.getElementById("legend");
-      const legendHeader = document.getElementById("legendHeader");
-      const legendContent = document.getElementById("legendContent");
-      function collapseLegend() {
-        legendContent.style.height = legendContent.scrollHeight + "px";
-        requestAnimationFrame(() => { legend.classList.add("collapsed"); legendContent.style.height = "0px"; });
-      }
-      function expandLegend() {
-        legendContent.style.height = "0px"; legend.classList.remove("collapsed");
-        requestAnimationFrame(() => { legendContent.style.height = legendContent.scrollHeight + "px"; });
-        const onEnd = (e) => { if (e.propertyName === "height") { legendContent.style.height = "auto"; legendContent.removeEventListener("transitionend", onEnd); } };
-        legendContent.addEventListener("transitionend", onEnd);
-      }
-      legendHeader.addEventListener("click", () => {
-        const isCollapsed = legend.classList.contains("collapsed");
-        if (isCollapsed) expandLegend(); else collapseLegend();
-      });
-      window.addEventListener("load", () => {
-        if (legend.classList.contains("collapsed")) legendContent.style.height = "0px";
-        else legendContent.style.height = "auto";
-      });
-
-      // --- Footer panel toggle (smooth) (с защитой, если элемента нет) ---
-      const footerPanel  = document.getElementById('footerPanel');
-      const footerHeader = document.getElementById('footerHeader');
-      const footerContent = document.getElementById('footerContent');
-      function collapseFooter() {
-        if (!footerPanel || !footerContent) return;
-        footerContent.style.height = footerContent.scrollHeight + 'px';
-        requestAnimationFrame(() => { footerPanel.classList.add('collapsed'); footerContent.style.height = '0px'; });
-      }
-      function expandFooter() {
-        if (!footerPanel || !footerContent) return;
-        footerContent.style.height = '0px'; footerPanel.classList.remove('collapsed');
-        requestAnimationFrame(() => { footerContent.style.height = footerContent.scrollHeight + 'px'; });
-        const onEnd = (e) => { if (e.propertyName === 'height') { footerContent.style.height = 'auto'; footerContent.removeEventListener('transitionend', onEnd); } };
-        footerContent.addEventListener('transitionend', onEnd);
-      }
-      if (footerHeader && footerPanel && footerContent) {
-        footerHeader.addEventListener('click', () => {
-          const isCollapsed = footerPanel.classList.contains('collapsed');
-          if (isCollapsed) expandFooter(); else collapseFooter();
-        });
-        window.addEventListener('load', () => {
-          if (footerPanel.classList.contains('collapsed')) footerContent.style.height = '0px';
-          else footerContent.style.height = 'auto';
+        const q = `[out:json][timeout:40];
+        (way["hgv"~"^(no|destination|delivery)$"](around:${radiusM()},${lat},${lon});
+         way["access"="no"](around:${radiusM()},${lat},${lon});
+         way["maxweight"](around:${radiusM()},${lat},${lon});
+        );out geom tags;`;
+        const data = await overpass(q);
+        data.elements.forEach(el=>{
+          if(!el.geometry) return;
+          const coords = el.geometry.map(g=>[g.lon,g.lat]);
+          const line = turf.lineString(coords);
+          const buf = turf.buffer(line, 0.05, { units: "kilometers" });
+          L.geoJSON(buf, { style:{color:"#d70000",weight:1,fillColor:"#ff4d4d",fillOpacity:0.25} }).addTo(noGoLayer);
         });
       }
 
-      // --- Init ---
-      (async function init() {
-        const loc = await locateUser();
-        if (loc) { setUserLocation(loc.lat, loc.lon); map.setView([loc.lat, loc.lon], 11); }
-        const center = loc ? [loc.lat, loc.lon] : [52.2297, 21.0122];
+      async function loadAll(lat,lon){
+        await loadTruck(lat,lon);
+        await loadFuel(lat,lon);
+        await loadMotel(lat,lon);
+        await loadIndustrial(lat,lon);
+        await loadNoGo(lat,lon);
+      }
 
-        await loadPOIs(center[0], center[1]);   // Overpass: fuel/motel/industrial
-        await loadTruckParkingsViaMapTrip();    // MapTrip: truck parking
-        loadNoGo();
+      async function locateUser(){
+        if(!navigator.geolocation) return null;
+        return new Promise(res=>{
+          navigator.geolocation.getCurrentPosition(
+            pos=>res({lat:pos.coords.latitude,lon:pos.coords.longitude}),
+            ()=>res(null),
+            {enableHighAccuracy:true,timeout:8000}
+          );
+        });
+      }
+
+      document.getElementById("btnLocate").onclick = async ()=>{
+        const loc = await locateUser();
+        if(loc){ map.setView([loc.lat,loc.lon],11); await loadAll(loc.lat,loc.lon);}
+        else alert("Не удалось определить геолокацию");
+      };
+      document.getElementById("btnReload").onclick = async ()=>{
+        const c = map.getCenter(); await loadAll(c.lat,c.lng);
+      };
+
+      // Первичная загрузка
+      (async ()=>{
+        const c = map.getCenter();
+        await loadAll(c.lat,c.lng);
       })();
     </script>
   </body>
