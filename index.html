@@ -215,23 +215,88 @@
         });
       }
 
-      async function loadNoGo(lat,lon){
-        if(!document.getElementById("cbNoGo").checked) return;
+      async function loadNoGo(lat, lon) {
+        if (!document.getElementById("cbNoGo").checked) return;
         noGoLayer.clearLayers();
+      
         const q = `[out:json][timeout:40];
-        (way["hgv"~"^(no|destination|delivery)$"](around:${radiusM()},${lat},${lon});
-         way["access"="no"](around:${radiusM()},${lat},${lon});
-         way["maxweight"](around:${radiusM()},${lat},${lon});
-        );out geom tags;`;
+        (
+          way["hgv"~"^(no|destination|delivery)$"](around:${radiusM()},${lat},${lon});
+          way["access"="no"](around:${radiusM()},${lat},${lon});
+          way["motor_vehicle"="no"](around:${radiusM()},${lat},${lon});
+          way["maxweight"](around:${radiusM()},${lat},${lon});        // весовые ограничения
+          way["maxaxleload"](around:${radiusM()},${lat},${lon});
+          way["maxheight"](around:${radiusM()},${lat},${lon});        // габариты (можно включить по желанию)
+          // если где-то размечены зоны:
+          relation["zone:hgv"](around:${radiusM()},${lat},${lon});
+          relation["access"="no"](around:${radiusM()},${lat},${lon});
+        );
+        out geom tags;`;
+      
         const data = await overpass(q);
-        data.elements.forEach(el=>{
-          if(!el.geometry) return;
-          const coords = el.geometry.map(g=>[g.lon,g.lat]);
+      
+        // 1) собираем буферы для линий и полигоны как есть
+        const features = [];
+      
+        (data.elements || []).forEach(el => {
+          if (!el.geometry) return;
+      
+          // Для замкнутых ways с площадью — сразу делаем Polygon
+          const isClosed = el.type === "way" &&
+                           el.geometry.length > 3 &&
+                           el.geometry[0].lat === el.geometry[el.geometry.length - 1].lat &&
+                           el.geometry[0].lon === el.geometry[el.geometry.length - 1].lon;
+      
+          if (isClosed) {
+            const ring = el.geometry.map(g => [g.lon, g.lat]);
+            try {
+              features.push(turf.polygon([ring], { d: 1 }));
+            } catch (_) {}
+            return;
+          }
+      
+          // Иначе — это линейные ограничения: буферим линию
+          const coords = el.geometry.map(g => [g.lon, g.lat]);
           const line = turf.lineString(coords);
-          const buf = turf.buffer(line, 0.05, { units: "kilometers" });
-          L.geoJSON(buf, { style:{color:"#d70000",weight:1,fillColor:"#ff4d4d",fillOpacity:0.25} }).addTo(noGoLayer);
+          try {
+            // ширину буфера можешь подправить (сейчас 50 м)
+            const buf = turf.buffer(line, 0.05, { units: "kilometers" });
+            if (buf) {
+              // ставим одинаковое свойство — нужно для dissolve
+              buf.properties = { d: 1 };
+              features.push(buf);
+            }
+          } catch (_) {}
         });
+      
+        if (!features.length) return;
+      
+        // 2) Dissolve: объединяем всё в одну (multi)полигональную геометрию
+        let dissolved;
+        try {
+          const fc = turf.featureCollection(features);
+          // dissolve объединяет по значению свойства; у нас у всех d=1
+          dissolved = turf.dissolve(fc, { propertyName: "d" });
+        } catch (e) {
+          // fallback: попарный union, если вдруг у CDN-версии нет dissolve
+          dissolved = features.reduce((acc, f) => {
+            try { return acc ? turf.union(acc, f) : f; } catch (_) { return acc || f; }
+          }, null);
+        }
+      
+        if (!dissolved) return;
+      
+        // 3) (необязательно) чуть упрощаем геометрию, чтобы рендер не задыхался
+        try {
+          dissolved = turf.truncate(dissolved, { precision: 6, coordinates: 2 });
+        } catch (_) {}
+      
+        // 4) Рисуем ОДНОЙ сплошной фигурой
+        L.geoJSON(dissolved, {
+          style: { color: "#d70000", weight: 1, fillColor: "#ff4d4d", fillOpacity: 0.25 }
+        }).addTo(noGoLayer);
       }
+
 
       async function loadAll(lat,lon){
         await loadTruck(lat,lon);
