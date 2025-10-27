@@ -5,18 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Truck Drivers Map — TruckWork</title>
 
+  <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <!-- MarkerCluster (optional but handy for density) -->
+  <!-- MarkerCluster -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
   <style>
-    html, body, #map { height: 100%; margin: 0; }
+    /* Ключевой фикс, чтобы карта точно отрисовывалась на весь экран */
+    html, body { height: 100%; margin: 0; }
+    #map { position: fixed; inset: 0; }  /* вместо height:100% */
 
-    /* Top controls */
+    /* Верхняя панель */
     .topbar {
       position: absolute; z-index: 1000; top: 10px; left: 50%; transform: translateX(-50%);
       width: calc(100% - 20px); max-width: 1100px;
@@ -25,48 +28,37 @@
       font: 14px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
     }
     .topbar .group { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-    .topbar .chip {
-      border:1px solid #ddd; padding:6px 10px; border-radius: 999px; background:#fff; cursor:pointer; user-select:none;
-    }
+    .topbar .chip { border:1px solid #ddd; padding:6px 10px; border-radius:999px; background:#fff; cursor:pointer; user-select:none; }
     .topbar .chip input { margin-right:6px; }
     .topbar button { border:1px solid #ddd; padding:6px 10px; border-radius:8px; background:#fff; cursor:pointer; }
     .topbar input[type="number"] { width: 84px; padding: 4px 6px; }
 
-    /* Bottom-left: sliding marker list */
+    /* Левый нижний список POI */
     .poi-panel {
       position: absolute; left: 10px; bottom: 10px; z-index: 1000; width: 300px;
       max-height: 40%; display: flex; flex-direction: column;
       background: rgba(255,255,255,.96); border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.12);
-      overflow: hidden;
-      font: 13px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      overflow: hidden; font: 13px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
     }
-    .poi-panel header {
-      display:flex; align-items:center; justify-content:space-between; padding: 8px 10px; border-bottom:1px solid #eee;
-      cursor: pointer; background:#fff;
-    }
-    .poi-panel .body {
-      transition: max-height .25s ease; overflow:auto; max-height: 220px;
-    }
+    .poi-panel header { display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-bottom:1px solid #eee; cursor:pointer; background:#fff; }
+    .poi-panel .body { transition:max-height .25s ease; overflow:auto; max-height:220px; }
     .poi-item { padding:8px 10px; border-bottom:1px solid #f2f2f2; cursor:pointer; }
     .poi-item:hover { background:#f8f8f8; }
     .tag { display:inline-block; padding:2px 6px; border-radius:999px; font-size:12px; border:1px solid #ddd; margin-left:6px; }
 
-    /* Bottom-right: restrictions list */
+    /* Правый нижний список ограничений */
     .restrictions {
       position: absolute; right: 10px; bottom: 10px; z-index: 1000; width: 340px;
       max-height: 40%; background: rgba(255,255,255,.96); border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.12);
-      overflow: hidden; display:flex; flex-direction: column;
-      font: 13px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      overflow: hidden; display:flex; flex-direction: column; font: 13px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
     }
-    .restrictions header {
-      padding: 8px 10px; border-bottom: 1px solid #eee; background:#fff; display:flex; align-items:center; gap:8px;
-    }
+    .restrictions header { padding: 8px 10px; border-bottom: 1px solid #eee; background:#fff; display:flex; align-items:center; gap:8px; }
     .restrictions .body { overflow:auto; padding: 8px 10px; }
     .restrictions .rule { padding:8px 8px; border-left:3px solid #dc3250; background:#fff; border-radius:6px; box-shadow:0 1px 4px rgba(0,0,0,.06); margin-bottom:8px; }
     .muted { opacity:.7; }
 
-    /* Simple colored markers */
-    .dot { width: 14px; height: 14px; border-radius: 50%; display:inline-block; border: 2px solid #333; margin-right: 6px; }
+    /* Точки */
+    .dot { width:14px; height:14px; border-radius:50%; display:inline-block; border:2px solid #333; margin-right:6px; }
     .dot.service{background:#89b5ff;border-color:#2b6cff;}
     .dot.repair{background:#ffd3a1;border-color:#c76a00;}
   </style>
@@ -74,25 +66,21 @@
 <body>
   <div id="map"></div>
 
-  <!-- Top filters -->
   <div class="topbar">
     <div class="group">
       <strong>Радиус (км)</strong>
       <input id="radiusKm" type="number" value="50" min="5" max="300" step="5" />
     </div>
-
     <div class="group">
       <label class="chip"><input type="checkbox" id="cbService" checked /> Сервис грузовиков</label>
       <label class="chip"><input type="checkbox" id="cbRepair" checked /> Ремонт/мастерские</label>
     </div>
-
     <div class="group">
       <button id="btnLocate">Моё местоположение</button>
       <button id="btnReload">Обновить</button>
     </div>
   </div>
 
-  <!-- Bottom-left: sliding list of current POIs -->
   <div class="poi-panel" id="poiPanel">
     <header id="poiToggle">
       <div><strong>Объекты рядом</strong> <span class="tag" id="poiCount">0</span></div>
@@ -101,7 +89,6 @@
     <div class="body" id="poiBody"></div>
   </div>
 
-  <!-- Bottom-right: traffic ban / restrictions list -->
   <div class="restrictions" id="restrictionsPanel">
     <header>
       <strong>Ограничения движения (правила)</strong>
@@ -113,27 +100,37 @@
   </div>
 
   <script>
-    // ====== BASE MAP ======
-    const map = L.map("map", { zoomSnap: 0.5 }).setView([52.23, 21.01], 6);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    // ==== Базовые карты ====
+    const osmStd = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution: "&copy; OpenStreetMap contributors"
-    }).addTo(map);
-
-    // ====== ICONS ======
-    const iconDot = (cls) => L.divIcon({
-      className: "marker",
-      html:`<span class="dot ${cls}"></span>`,
-      iconSize:[16,16], iconAnchor:[8,8]
+    });
+    const cartoLight = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+      maxZoom: 20,
+      attribution: "&copy; OpenStreetMap contributors & Carto"
     });
 
-    // ====== LAYERS ======
+    const map = L.map("map", { zoomSnap: 0.5, layers: [osmStd] }).setView([52.23, 21.01], 6);
+    L.control.layers(
+      { "OSM Standard": osmStd, "Carto Light": cartoLight },
+      null,
+      { position: "topleft", collapsed: true }
+    ).addTo(map);
+
+    // invalidateSize на случай отложенной отрисовки
+    setTimeout(() => map.invalidateSize(), 50);
+    window.addEventListener("resize", () => map.invalidateSize());
+
+    // ==== Иконки ====
+    const iconDot = (cls) => L.divIcon({ className: "marker", html:`<span class="dot ${cls}"></span>`, iconSize:[16,16], iconAnchor:[8,8] });
+
+    // ==== Слои ====
     const clusterService = L.markerClusterGroup({ disableClusteringAtZoom: 13 });
     const clusterRepair  = L.markerClusterGroup({ disableClusteringAtZoom: 13 });
     map.addLayer(clusterService);
     map.addLayer(clusterRepair);
 
-    // ====== UI ELEMENTS ======
+    // ==== UI ====
     const elRadius = document.getElementById("radiusKm");
     const elCbService = document.getElementById("cbService");
     const elCbRepair  = document.getElementById("cbRepair");
@@ -147,223 +144,154 @@
     let poiCollapsed = false;
     elPoiToggle.addEventListener("click", () => {
       poiCollapsed = !poiCollapsed;
-      const body = document.getElementById("poiBody");
-      body.style.maxHeight = poiCollapsed ? "0px" : "220px";
+      elPoiBody.style.maxHeight = poiCollapsed ? "0px" : "220px";
       elPoiArrow.textContent = poiCollapsed ? "▼" : "▲";
     });
 
-    // ====== HELPERS ======
+    // ==== Helpers ====
     const overpass = q => fetch("https://overpass-api.de/api/interpreter?data="+encodeURIComponent(q)).then(r=>r.json());
     const radiusM = () => Math.min(300000, Math.max(5000, +elRadius.value*1000));
-
-    function toLatLng(el) {
-      if (el.type === "node") return [el.lat, el.lon];
-      if (el.center) return [el.center.lat, el.center.lon];
-      return null;
-    }
-    function popupFromTags(t, category) {
+    function toLatLng(el){ if(el.type==="node")return[el.lat,el.lon]; if(el.center)return[el.center.lat,el.center.lon]; return null; }
+    function popupFromTags(t){
       const name = t.name || "Без названия";
       let s = `<b>${name}</b><br>`;
       if (t.operator) s += `${t.operator}<br>`;
       if (t.brand) s += `Бренд: ${t.brand}<br>`;
-      const phone = t.phone || t.contact:phone || t["contact:phone"];
+      const phone = t.phone || t["contact:phone"];
       if (phone) s += `📞 ${phone}<br>`;
       if (t.opening_hours) s += `⏰ ${t.opening_hours}<br>`;
       if (t.website) s += `<a href="${t.website}" target="_blank">Сайт</a>`;
       return s;
     }
 
-    // List builder (bottom-left)
-    function rebuildPoiList() {
+    function rebuildPoiList(){
       elPoiBody.innerHTML = "";
       const items = [];
-
-      if (elCbService.checked) {
-        clusterService.getLayers().forEach(m => {
-          items.push({ layer: m, cat: "service", title: m.options._title || "Сервис грузовиков" });
-        });
-      }
-      if (elCbRepair.checked) {
-        clusterRepair.getLayers().forEach(m => {
-          items.push({ layer: m, cat: "repair", title: m.options._title || "Ремонт/мастерская" });
-        });
-      }
+      if (elCbService.checked) clusterService.getLayers().forEach(m=>items.push({layer:m,cat:"service",title:m.options._title||"Сервис грузовиков"}));
+      if (elCbRepair.checked)  clusterRepair.getLayers().forEach(m=>items.push({layer:m,cat:"repair", title:m.options._title||"Ремонт/мастерская"}));
       elPoiCount.textContent = items.length;
-
-      items.forEach(({layer, cat, title}) => {
+      items.forEach(({layer,cat,title})=>{
         const div = document.createElement("div");
-        div.className = "poi-item";
-        div.innerHTML = `<span class="dot ${cat}"></span>${title}`;
-        div.onclick = () => {
-          const ll = layer.getLatLng();
-          map.setView(ll, Math.max(map.getZoom(), 14));
-          layer.openPopup();
-        };
+        div.className="poi-item";
+        div.innerHTML=`<span class="dot ${cat}"></span>${title}`;
+        div.onclick=()=>{ const ll=layer.getLatLng(); map.setView(ll, Math.max(map.getZoom(),14)); layer.openPopup(); };
         elPoiBody.appendChild(div);
       });
     }
 
-    // ====== OSM LOADERS (Service & Repair) ======
-    async function loadTruckServices(lat, lon) {
+    // ==== Загрузка сервисов ====
+    async function loadTruckServices(lat,lon){
       clusterService.clearLayers();
-      if (!elCbService.checked) return;
-
-      // Service places for trucks: service:vehicle:truck=yes (common on fuel/service sites)
+      if(!elCbService.checked) return;
       const q = `[out:json][timeout:40];
       (
         node["service:vehicle:truck"="yes"](around:${radiusM()},${lat},${lon});
         way["service:vehicle:truck"="yes"](around:${radiusM()},${lat},${lon});
         node["amenity"="truck_service"](around:${radiusM()},${lat},${lon});
         way["amenity"="truck_service"](around:${radiusM()},${lat},${lon});
-      );
-      out center tags;`;
+      ); out center tags;`;
       const data = await overpass(q);
-      (data.elements || []).forEach(el => {
-        const p = toLatLng(el); if (!p) return;
-        const t = el.tags || {};
-        const m = L.marker(p, { icon: iconDot("service"), _title: t.name || "Сервис грузовиков" })
-          .bindPopup(popupFromTags(t, "service"));
+      (data.elements||[]).forEach(el=>{
+        const p = toLatLng(el); if(!p) return;
+        const t = el.tags||{};
+        const m = L.marker(p,{icon:iconDot("service"), _title:t.name||"Сервис грузовиков"}).bindPopup(popupFromTags(t));
         clusterService.addLayer(m);
       });
     }
 
-    async function loadRepair(lat, lon) {
+    // ==== Загрузка ремонта ====
+    async function loadRepair(lat,lon){
       clusterRepair.clearLayers();
-      if (!elCbRepair.checked) return;
-
-      // Truck-friendly repair: car_repair with hgv=yes|designated, truck repair hints, tyres for HGV
+      if(!elCbRepair.checked) return;
       const q = `[out:json][timeout:40];
       (
         node["shop"="car_repair"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
         way["shop"="car_repair"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
-
         node["shop"="tyres"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
         way["shop"="tyres"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
-
         node["truck:repair"="yes"](around:${radiusM()},${lat},${lon});
         way["truck:repair"="yes"](around:${radiusM()},${lat},${lon});
-      );
-      out center tags;`;
+      ); out center tags;`;
       const data = await overpass(q);
-      (data.elements || []).forEach(el => {
-        const p = toLatLng(el); if (!p) return;
-        const t = el.tags || {};
-        const m = L.marker(p, { icon: iconDot("repair"), _title: t.name || "Ремонт/мастерская" })
-          .bindPopup(popupFromTags(t, "repair"));
+      (data.elements||[]).forEach(el=>{
+        const p = toLatLng(el); if(!p) return;
+        const t = el.tags||{};
+        const m = L.marker(p,{icon:iconDot("repair"), _title:t.name||"Ремонт/мастерская"}).bindPopup(popupFromTags(t));
         clusterRepair.addLayer(m);
       });
     }
 
-    // ====== Restrictions (Trafficban) ======
-    // Minimal integration scaffold: set your API key & endpoint according to their docs.
-    const TRAFFICBAN_API_KEY = ""; // <- put your key here
-    async function getCountryByLatLon(lat, lon) {
-      try {
+    // ==== Trafficban-заглушка ====
+    const TRAFFICBAN_API_KEY = "";
+    async function getCountryByLatLon(lat,lon){
+      try{
         const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`);
         const j = await r.json();
-        const country = j?.address?.country || "";
-        const cc = j?.address?.country_code ? j.address.country_code.toUpperCase() : "";
-        return { country, cc };
-      } catch {
-        return { country: "", cc: "" };
-      }
+        return { country: j?.address?.country || "", cc: j?.address?.country_code?.toUpperCase() || "" };
+      } catch { return { country:"", cc:"" }; }
     }
-
-    async function loadTrafficBans(lat, lon) {
+    async function loadTrafficBans(lat,lon){
       elRestrictionsBody.innerHTML = `<div class="muted">Загрузка ограничений…</div>`;
-      const { country, cc } = await getCountryByLatLon(lat, lon);
+      const { country } = await getCountryByLatLon(lat,lon);
       elCountryInfo.textContent = country ? `— ${country}` : "";
-
-      // If no API key, show hint and exit gracefully
-      if (!TRAFFICBAN_API_KEY) {
-        elRestrictionsBody.innerHTML = `
-          <div class="muted">Подключите Trafficban API (вставьте ключ в переменную <code>TRAFFICBAN_API_KEY</code>).
-          Будут показаны правила ограничений движения для страны по центру карты.</div>`;
+      if(!TRAFFICBAN_API_KEY){
+        elRestrictionsBody.innerHTML = `<div class="muted">Вставьте ключ Trafficban API, чтобы отображать реальные правила по стране.</div>`;
         return;
       }
-
-      try {
-        // TODO: adapt to Trafficban’s actual endpoint & parameters per their docs.
-        // Example shape (pseudo):
-        // const url = `https://trafficban.com/api/v1/restrictions?country=${cc}&date=${new Date().toISOString().slice(0,10)}`;
-        // const res = await fetch(url, { headers: { Authorization: `Bearer ${TRAFFICBAN_API_KEY}` } });
-
-        // Placeholder demo until endpoint is set:
-        const demo = {
-          rules: [
-            { title: "Воскресный запрет", text: "Воскресенье, 00:00–22:00 для ТС >7.5 т, исключения для скоропортящихся.", ref: "§123 Abs. 4" },
-            { title: "Праздничные дни", text: "1 и 11 ноября — полный запрет для ТС >12 т (см. перечень исключений).", ref: "Festtage Liste" }
-          ]
-        };
-
-        elRestrictionsBody.innerHTML = demo.rules.map(r => `
-          <div class="rule">
-            <b>${r.title}</b><br>${r.text}
-            ${r.ref ? `<div class="muted" style="margin-top:4px">Источник: ${r.ref}</div>` : ""}
-          </div>
-        `).join("");
-
-      } catch (e) {
-        elRestrictionsBody.innerHTML = `<div class="muted">Не удалось загрузить данные ограничений. Попробуйте позже.</div>`;
-      }
+      // тут будет реальный запрос к Trafficban
     }
 
-    // ====== LOAD ALL ======
-    async function loadAll(lat, lon) {
-      await loadTruckServices(lat, lon);
-      await loadRepair(lat, lon);
+    // ==== Общая загрузка ====
+    async function loadAll(lat,lon){
+      await loadTruckServices(lat,lon);
+      await loadRepair(lat,lon);
       rebuildPoiList();
-      await loadTrafficBans(lat, lon);
+      await loadTrafficBans(lat,lon);
     }
 
-    // ====== GEOLOCATION / UI ======
-    async function locateUser() {
-      if (!navigator.geolocation) return null;
-      return new Promise(res => {
+    // ==== Геолокация/кнопки ====
+    async function locateUser(){
+      if(!navigator.geolocation) return null;
+      return new Promise(res=>{
         navigator.geolocation.getCurrentPosition(
-          pos => res({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
-          () => res(null),
-          { enableHighAccuracy: true, timeout: 8000 }
+          pos=>res({lat:pos.coords.latitude, lon:pos.coords.longitude}),
+          ()=>res(null),
+          { enableHighAccuracy:true, timeout:8000 }
         );
       });
     }
-
-    document.getElementById("btnLocate").onclick = async () => {
+    document.getElementById("btnLocate").onclick = async ()=>{
       const loc = await locateUser();
-      if (loc) { map.setView([loc.lat, loc.lon], 11); await loadAll(loc.lat, loc.lon); }
+      if(loc){ map.setView([loc.lat, loc.lon], 11); await loadAll(loc.lat, loc.lon); }
       else alert("Не удалось определить геолокацию");
     };
-    document.getElementById("btnReload").onclick = async () => {
+    document.getElementById("btnReload").onclick = async ()=>{
       const c = map.getCenter(); await loadAll(c.lat, c.lng);
     };
 
-    // Filter toggles -> reload visible layers only
-    [elCbService, elCbRepair].forEach(cb => {
-      cb.addEventListener("change", async () => {
+    [elCbService, elCbRepair].forEach(cb=>{
+      cb.addEventListener("change", async ()=>{
         const c = map.getCenter();
-        if (cb === elCbService) clusterService.clearLayers();
-        if (cb === elCbRepair)  clusterRepair.clearLayers();
+        if(cb===elCbService) clusterService.clearLayers();
+        if(cb===elCbRepair)  clusterRepair.clearLayers();
         await loadAll(c.lat, c.lng);
       });
     });
-
-    // Radius change -> reload
-    elRadius.addEventListener("change", async () => {
+    elRadius.addEventListener("change", async ()=>{
       const c = map.getCenter(); await loadAll(c.lat, c.lng);
     });
 
-    // When map stops moving a bit, refresh traffic bans for current country (not spamming)
-    let tbTimer = null;
-    map.on("moveend", () => {
-      if (tbTimer) clearTimeout(tbTimer);
-      tbTimer = setTimeout(async () => {
-        const c = map.getCenter();
-        await loadTrafficBans(c.lat, c.lng);
+    // Обновлять панель ограничений при смещении центра
+    let tbTimer=null;
+    map.on("moveend", ()=>{
+      if(tbTimer) clearTimeout(tbTimer);
+      tbTimer = setTimeout(async ()=>{
+        const c = map.getCenter(); await loadTrafficBans(c.lat, c.lng);
       }, 600);
     });
 
-    // ====== INIT ======
-    (async () => {
+    // ==== Старт ====
+    (async ()=>{
       const c = map.getCenter();
       await loadAll(c.lat, c.lng);
     })();
