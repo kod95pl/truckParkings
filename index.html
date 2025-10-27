@@ -36,7 +36,7 @@
       position: absolute; left: 10px; bottom: 10px; z-index: 1000;
       background: rgba(255,255,255,.96); border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.12);
       padding: 10px 12px; font: 13px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      min-width: 220px;
+      min-width: 260px;
     }
     .legend .row { display:flex; align-items:center; gap:8px; margin:6px 0; }
     .legend .hint { margin-top:6px; opacity:.7; font-size:12px; }
@@ -96,58 +96,44 @@
   </div>
 
   <script>
-    // === Базовые карты ===
-    const osmStd = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" });
-    const cartoLight = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", { maxZoom: 20, attribution: "&copy; OpenStreetMap contributors & Carto" });
+    // ===== CONFIG: вставь свои ключи =====
+    const FOURSQUARE_API_KEY = "G4IOHLEFEJVKP15H3FPBPGNFYBSDMBLLKN4XFSU24TSH3FH0";   // https://docs.foursquare.com/developer/reference/places-api-overview
+    const GEOAPIFY_API_KEY   = "4ec7d28510a8484d8726a1b462c5f34b";   // https://apidocs.geoapify.com/docs/places/
+    const PROVIDERS = { foursquare: true, geoapify: true }; // включай/выключай
 
-    const map = L.map("map", { zoomSnap: 0.5, layers: [osmStd] }).setView([52.23, 21.01], 6);
-    L.control.layers({ "OSM Standard": osmStd, "Carto Light": cartoLight }, null, { position: "topleft", collapsed: true }).addTo(map);
+    // ===== Карта (только Carto Light) =====
+    const cartoLight = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+      maxZoom: 20,
+      attribution: "&copy; OpenStreetMap contributors & Carto"
+    });
+    const map = L.map("map", { zoomSnap: 0.5, layers: [cartoLight] }).setView([52.23, 21.01], 10);
     setTimeout(() => map.invalidateSize(), 50);
     window.addEventListener("resize", () => map.invalidateSize());
 
-    // === Иконки и слои ===
+    // ===== Иконки / слои =====
     const iconDot = (cls) => L.divIcon({ className: "marker", html:`<span class="dot ${cls}"></span>`, iconSize:[16,16], iconAnchor:[8,8] });
     const clusterService = L.markerClusterGroup({ disableClusteringAtZoom: 13 });
     const clusterRepair  = L.markerClusterGroup({ disableClusteringAtZoom: 13 });
     map.addLayer(clusterService); map.addLayer(clusterRepair);
 
-    // === UI ===
+    // ===== UI =====
     const elRadius = document.getElementById("radiusKm");
     const elCbService = document.getElementById("cbService");
     const elCbRepair  = document.getElementById("cbRepair");
     const elCountryInfo = document.getElementById("countryInfo");
     const elRestrictionsBody = document.getElementById("restrictionsBody");
 
-    // === Overpass helper с резервом ===
-    async function overpass(query){
-      const endpoints = [
-        "https://overpass-api.de/api/interpreter",
-        "https://overpass.kumi.systems/api/interpreter"
-      ];
-      for (const ep of endpoints){
-        try{
-          const r = await fetch(ep+"?data="+encodeURIComponent(query), { timeout: 30000 });
-          if (r.ok) return await r.json();
-        }catch(_){}
-      }
-      return { elements: [] };
-    }
     const radiusM = () => Math.min(300000, Math.max(5000, +elRadius.value*1000));
-    function toLatLng(el){ if(el.type==="node")return[el.lat,el.lon]; if(el.center)return[el.center.lat,el.center.lon]; return null; }
 
-    function popupFromTags(t){
-      const name = t.name || "Без названия";
-      let s = `<b>${name}</b><br>`;
-      if (t.operator) s += `${t.operator}<br>`;
-      if (t.brand) s += `Бренд: ${t.brand}<br>`;
-      const phone = t.phone || t["contact:phone"];
-      if (phone) s += `📞 ${phone}<br>`;
-      if (t.opening_hours) s += `⏰ ${t.opening_hours}<br>`;
-      if (t.website) s += `<a href="${t.website}" target="_blank">Сайт</a>`;
+    function popupHTML({name, addr, phone, hours, url}) {
+      let s = `<b>${name || "Без названия"}</b>`;
+      if (addr) s += `<div>${addr}</div>`;
+      if (phone) s += `<div>📞 ${phone}</div>`;
+      if (hours) s += `<div>⏰ ${hours}</div>`;
+      if (url)   s += `<div><a href="${url}" target="_blank" rel="noopener">Сайт</a></div>`;
       return s;
     }
 
-    // === вспомогательное уведомление, если ничего не нашли ===
     function showEmptyNotice() {
       const old = document.getElementById('emptyNotice');
       if (old) old.remove();
@@ -155,96 +141,117 @@
         const n = document.createElement('div');
         n.id = 'emptyNotice';
         n.style.cssText = 'position:absolute;left:50%;top:78px;transform:translateX(-50%);z-index:1200;background:rgba(255,255,255,.96);border:1px solid #eee;border-radius:10px;padding:8px 10px;box-shadow:0 2px 10px rgba(0,0,0,.08);font:13px system-ui';
-        n.innerHTML = 'В этом радиусе сервисы не найдены. Увеличьте радиус или переместите карту.';
+        n.innerHTML = 'Нет точек от провайдеров в текущем радиусе. Увеличьте радиус или переместите карту.';
         document.body.appendChild(n);
         setTimeout(()=>n.remove(), 4000);
       }
     }
 
-    // === Загрузка сервисов (расширенные теги + эвристика по названиям) ===
-    async function loadTruckServices(lat,lon){
-      clusterService.clearLayers();
-      if(!elCbService.checked) return;
+    // ====== Провайдеры ======
 
-      // строгие признаки
-      const q1 = `
-        node["service:vehicle:truck"="yes"](around:${radiusM()},${lat},${lon});
-        way ["service:vehicle:truck"="yes"](around:${radiusM()},${lat},${lon});
-        node["amenity"="truck_service"](around:${radiusM()},${lat},${lon});
-        way ["amenity"="truck_service"](around:${radiusM()},${lat},${lon});
-        node["truck:service"="yes"](around:${radiusM()},${lat},${lon});
-        way  ["truck:service"="yes"](around:${radiusM()},${lat},${lon});
-      `;
-      // ТО/диагностика, сервис-станции с HGV
-      const q2 = `
-        node["amenity"="vehicle_inspection"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
-        way  ["amenity"="vehicle_inspection"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
-        node["amenity"="service_station"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
-        way  ["amenity"="service_station"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
-      `;
-      // эвристика по названию (Overpass: флаг i указывается вторым аргументом)
-      const nameRe = "(truck|tir|ciezar|ciężar|hgv|lorry|serwis tir|serwis ciezar|24h tir)";
-      const q3 = `
-        node["amenity"="car_repair"]["name"~"${nameRe}", i](around:${radiusM()},${lat},${lon});
-        way  ["amenity"="car_repair"]["name"~"${nameRe}", i](around:${radiusM()},${lat},${lon});
-        node["shop"="car_repair"]["name"~"${nameRe}", i](around:${radiusM()},${lat},${lon});
-        way  ["shop"="car_repair"]["name"~"${nameRe}", i](around:${radiusM()},${lat},${lon});
-        node["shop"="tyres"]["name"~"${nameRe}", i](around:${radiusM()},${lat},${lon});
-        way  ["shop"="tyres"]["name"~"${nameRe}", i](around:${radiusM()},${lat},${lon});
-        node[~"^(truck:|hgv:|lorry:).*$"~"."](around:${radiusM()},${lat},${lon});
-        way  [~"^(truck:|hgv:|lorry:).*$"~"."](around:${radiusM()},${lat},${lon});
-      `;
+    // --- Foursquare Places (v3 /places/search) ---
+    async function fetchFoursquare(lat, lon, rad) {
+      if (!FOURSQUARE_API_KEY || !PROVIDERS.foursquare) return [];
+      const headers = { "Authorization": FOURSQUARE_API_KEY, "accept": "application/json" };
+      // два запроса: "truck repair" и "truck service". radius в метрах, max 100000
+      const queries = ["truck repair", "truck service", "HGV repair", "TIR"];
+      const results = [];
+      for (const q of queries) {
+        const url = new URL("https://api.foursquare.com/v3/places/search");
+        url.searchParams.set("ll", `${lat},${lon}`);
+        url.searchParams.set("radius", Math.min(rad, 100000));
+        url.searchParams.set("limit", "50");
+        url.searchParams.set("sort", "DISTANCE");
+        url.searchParams.set("query", q);
+        url.searchParams.set("fields", "fsq_id,name,geocodes,location,categories,hours,website,tel"); // hours могут быть не всегда
+        try {
+          const r = await fetch(url, { headers });
+          if (r.ok) {
+            const j = await r.json();
+            for (const p of (j.results||[])) {
+              results.push({
+                name: p.name,
+                lat: p.geocodes?.main?.latitude,
+                lon: p.geocodes?.main?.longitude,
+                addr: [p.location?.address, p.location?.locality].filter(Boolean).join(", "),
+                phone: p.tel || null,
+                hours: p.hours?.display || null,
+                url: p.website || null,
+                guess: "auto" // тип определим ниже
+              });
+            }
+          }
+        } catch(_) {}
+      }
+      return results;
+    }
+    // --- Geoapify Places ---
+    async function fetchGeoapify(lat, lon, rad) {
+      if (!GEOAPIFY_API_KEY || !PROVIDERS.geoapify) return [];
+      // категории под ремонт/сервис грузовиков; Geoapify опирается на OSM и имеет иерархию categories
+      // Возьмём ремонт авто + шины + сервис шире, а затем отфильтруем по ключевым словам
+      const categories = [
+        "service.vehicle", "service.vehicle.repair", "service.vehicle.tire"
+      ].join(",");
+      const url = new URL("https://api.geoapify.com/v2/places");
+      url.searchParams.set("categories", categories);
+      url.searchParams.set("filter", `circle:${lon},${lat},${Math.min(rad, 100000)}`);
+      url.searchParams.set("bias", `proximity:${lon},${lat}`);
+      url.searchParams.set("limit", "200");
+      url.searchParams.set("apiKey", GEOAPIFY_API_KEY);
+      url.searchParams.set("lang", "ru");
+      try {
+        const r = await fetch(url);
+        if (!r.ok) return [];
+        const j = await r.json();
+        return (j.features||[]).map(f => ({
+          name: f.properties?.name,
+          lat: f.properties?.lat,
+          lon: f.properties?.lon,
+          addr: f.properties?.formatted,
+          phone: f.properties?.contact?.phone || null,
+          hours: f.properties?.opening_hours || null,
+          url: f.properties?.website || null,
+          // простая эвристика: по имени/категориям считаем repair/service
+          guess: (String((f.properties?.categories||[]).join(",")).match(/repair|tire/i) ||
+                  String(f.properties?.name||"").match(/tir|truck|hgv|ciezar|ciężar|wulkan|opon/i))
+                  ? "repair" : "service"
+        }));
+      } catch(_) { return []; }
+    }
 
-      const q = `[out:json][timeout:40];(${q1}${q2}${q3});out center tags;`;
-      const data = await overpass(q);
+    function addMarker(obj){
+      if (!obj.lat || !obj.lon) return;
+      // классификация: если в имени/часы/категориях есть ключи — это ремонт
+      const repairHit = /repair|tire|wulkan|opon|шины|сервис\s*tir|truck/i.test(
+        [obj.guess, obj.name, obj.hours].filter(Boolean).join(" ")
+      );
+      const icon = repairHit ? iconDot("repair") : iconDot("service");
+      const layer = repairHit ? clusterRepair : clusterService;
+      const m = L.marker([obj.lat, obj.lon], { icon }).bindPopup(
+        popupHTML({ name: obj.name, addr: obj.addr, phone: obj.phone, hours: obj.hours, url: obj.url })
+      );
+      layer.addLayer(m);
+    }
 
-      (data.elements||[]).forEach(el=>{
-        const p = toLatLng(el); if(!p) return;
-        const t = el.tags||{};
-        const m = L.marker(p,{icon:iconDot("service"), _title:t.name||"Сервис грузовиков"}).bindPopup(popupFromTags(t));
-        clusterService.addLayer(m);
+    async function loadExternalProviders(lat, lon, rad) {
+      const batches = await Promise.all([
+        fetchFoursquare(lat, lon, rad),
+        fetchGeoapify(lat, lon, rad)
+      ]);
+      const merged = [].concat(...batches);
+      // фильтры по чекбоксам
+      merged.forEach(o=>{
+        const repairHit = /repair|tire|wulkan|opon|шины|сервис\s*tir|truck/i.test(
+          [o.guess, o.name, o.hours].filter(Boolean).join(" ")
+        );
+        if (repairHit && !elCbRepair.checked) return;
+        if (!repairHit && !elCbService.checked) return;
+        addMarker(o);
       });
     }
 
-    // === Загрузка ремонта (расширенные теги + эвристика по названиям) ===
-    async function loadRepair(lat,lon){
-      clusterRepair.clearLayers();
-      if(!elCbRepair.checked) return;
-
-      const q1 = `
-        node["shop"="car_repair"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
-        way  ["shop"="car_repair"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
-        node["amenity"="car_repair"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
-        way  ["amenity"="car_repair"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
-        node["shop"="tyres"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
-        way  ["shop"="tyres"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
-        node["repair:truck"="yes"](around:${radiusM()},${lat},${lon});
-        way  ["repair:truck"="yes"](around:${radiusM()},${lat},${lon});
-        node["truck:repair"="yes"](around:${radiusM()},${lat},${lon});
-        way  ["truck:repair"="yes"](around:${radiusM()},${lat},${lon});
-      `;
-      const nameRe = "(truck|tir|ciezar|ciężar|hgv|lorry|serwis tir|serwis ciezar|wulkanizacja tir|opony tir|24h)";
-      const q2 = `
-        node["amenity"="car_repair"]["name"~"${nameRe}", i](around:${radiusM()},${lat},${lon});
-        way  ["amenity"="car_repair"]["name"~"${nameRe}", i](around:${radiusM()},${lat},${lon});
-        node["shop"="car_repair"]["name"~"${nameRe}", i](around:${radiusM()},${lat},${lon});
-        way  ["shop"="car_repair"]["name"~"${nameRe}", i](around:${radiusM()},${lat},${lon});
-        node["shop"="tyres"]["name"~"${nameRe}", i](around:${radiusM()},${lat},${lon});
-        way  ["shop"="tyres"]["name"~"${nameRe}", i](around:${radiusM()},${lat},${lon});
-      `;
-
-      const q = `[out:json][timeout:40];(${q1}${q2});out center tags;`;
-      const data = await overpass(q);
-
-      (data.elements||[]).forEach(el=>{
-        const p = toLatLng(el); if(!p) return;
-        const t = el.tags||{};
-        const m = L.marker(p,{icon:iconDot("repair"), _title:t.name||"Ремонт/мастерская"}).bindPopup(popupFromTags(t));
-        clusterRepair.addLayer(m);
-      });
-    }
-
-    // === Trafficban-заглушка ===
+    // ===== Trafficban-заглушка (оставим как есть) =====
     const TRAFFICBAN_API_KEY = "";
     async function getCountryByLatLon(lat,lon){
       try{
@@ -261,18 +268,22 @@
         elRestrictionsBody.innerHTML = `<div class="muted">Вставьте ключ Trafficban API, чтобы отображать реальные правила по стране.</div>`;
         return;
       }
-      // здесь будет реальный запрос
+      // здесь будет реальный запрос к trafficban.com
     }
 
-    // === Общая загрузка ===
+    // ===== Общая загрузка =====
     async function loadAll(lat,lon){
-      await loadTruckServices(lat,lon);
-      await loadRepair(lat,lon);
+      clusterService.clearLayers();
+      clusterRepair.clearLayers();
+      const rad = radiusM();
+      await loadExternalProviders(lat, lon, rad);
       await loadTrafficBans(lat,lon);
+      if (!elCbService.checked) clusterService.clearLayers();
+      if (!elCbRepair.checked)  clusterRepair.clearLayers();
       showEmptyNotice();
     }
 
-    // === Геолокация/кнопки ===
+    // ===== Геолокация/кнопки =====
     async function locateUser(){
       if(!navigator.geolocation) return null;
       return new Promise(res=>{
@@ -294,14 +305,14 @@
     [elCbService, elCbRepair].forEach(cb=>{
       cb.addEventListener("change", async ()=>{
         const c = map.getCenter();
-        if(cb===elCbService) clusterService.clearLayers();
-        if(cb===elCbRepair)  clusterRepair.clearLayers();
         await loadAll(c.lat, c.lng);
       });
     });
     document.getElementById("radiusKm").addEventListener("change", async ()=>{
       const c = map.getCenter(); await loadAll(c.lat, c.lng);
     });
+
+    // подтягивать правила при смещении центра
     let tbTimer=null;
     map.on("moveend", ()=>{
       if(tbTimer) clearTimeout(tbTimer);
@@ -310,7 +321,7 @@
       }, 600);
     });
 
-    // === Старт ===
+    // ===== Старт =====
     (async ()=>{
       const c = map.getCenter();
       await loadAll(c.lat, c.lng);
