@@ -15,11 +15,9 @@
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
   <style>
-    /* Ключевой фикс, чтобы карта точно отрисовывалась на весь экран */
     html, body { height: 100%; margin: 0; }
-    #map { position: fixed; inset: 0; }  /* вместо height:100% */
+    #map { position: fixed; inset: 0; }
 
-    /* Верхняя панель */
     .topbar {
       position: absolute; z-index: 1000; top: 10px; left: 50%; transform: translateX(-50%);
       width: calc(100% - 20px); max-width: 1100px;
@@ -33,20 +31,17 @@
     .topbar button { border:1px solid #ddd; padding:6px 10px; border-radius:8px; background:#fff; cursor:pointer; }
     .topbar input[type="number"] { width: 84px; padding: 4px 6px; }
 
-    /* Левый нижний список POI */
-    .poi-panel {
-      position: absolute; left: 10px; bottom: 10px; z-index: 1000; width: 300px;
-      max-height: 40%; display: flex; flex-direction: column;
+    /* Легенда (нижний левый) */
+    .legend {
+      position: absolute; left: 10px; bottom: 10px; z-index: 1000;
       background: rgba(255,255,255,.96); border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.12);
-      overflow: hidden; font: 13px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      padding: 10px 12px; font: 13px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      min-width: 220px;
     }
-    .poi-panel header { display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-bottom:1px solid #eee; cursor:pointer; background:#fff; }
-    .poi-panel .body { transition:max-height .25s ease; overflow:auto; max-height:220px; }
-    .poi-item { padding:8px 10px; border-bottom:1px solid #f2f2f2; cursor:pointer; }
-    .poi-item:hover { background:#f8f8f8; }
-    .tag { display:inline-block; padding:2px 6px; border-radius:999px; font-size:12px; border:1px solid #ddd; margin-left:6px; }
+    .legend .row { display:flex; align-items:center; gap:8px; margin:6px 0; }
+    .legend .hint { margin-top:6px; opacity:.7; font-size:12px; }
 
-    /* Правый нижний список ограничений */
+    /* Ограничения (нижний правый) */
     .restrictions {
       position: absolute; right: 10px; bottom: 10px; z-index: 1000; width: 340px;
       max-height: 40%; background: rgba(255,255,255,.96); border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.12);
@@ -58,7 +53,7 @@
     .muted { opacity:.7; }
 
     /* Точки */
-    .dot { width:14px; height:14px; border-radius:50%; display:inline-block; border:2px solid #333; margin-right:6px; }
+    .dot { width:14px; height:14px; border-radius:50%; display:inline-block; border:2px solid #333; }
     .dot.service{background:#89b5ff;border-color:#2b6cff;}
     .dot.repair{background:#ffd3a1;border-color:#c76a00;}
   </style>
@@ -66,6 +61,7 @@
 <body>
   <div id="map"></div>
 
+  <!-- Верхняя панель -->
   <div class="topbar">
     <div class="group">
       <strong>Радиус (км)</strong>
@@ -81,115 +77,93 @@
     </div>
   </div>
 
-  <div class="poi-panel" id="poiPanel">
-    <header id="poiToggle">
-      <div><strong>Объекты рядом</strong> <span class="tag" id="poiCount">0</span></div>
-      <div id="poiArrow">▲</div>
-    </header>
-    <div class="body" id="poiBody"></div>
+  <!-- Легенда -->
+  <div class="legend">
+    <div class="row"><span class="dot service"></span>Сервис для грузовиков</div>
+    <div class="row"><span class="dot repair"></span>Ремонт / мастерские / шины (HGV)</div>
+    <div class="hint">Нажмите на маркер — подробности, телефон, сайт.</div>
   </div>
 
+  <!-- Ограничения -->
   <div class="restrictions" id="restrictionsPanel">
     <header>
       <strong>Ограничения движения (правила)</strong>
       <span class="muted" id="countryInfo"></span>
     </header>
     <div class="body" id="restrictionsBody">
-      <div class="muted">Здесь будут показаны актуальные ограничения для грузовиков (выходные, праздники, ночные запреты и т.п.). Подключите Trafficban API.</div>
+      <div class="muted">Вставьте ключ Trafficban API, чтобы отображать реальные правила по стране.</div>
     </div>
   </div>
 
   <script>
-    // ==== Базовые карты ====
-    const osmStd = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: "&copy; OpenStreetMap contributors"
-    });
-    const cartoLight = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-      maxZoom: 20,
-      attribution: "&copy; OpenStreetMap contributors & Carto"
-    });
+    // === Базовые карты ===
+    const osmStd = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" });
+    const cartoLight = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", { maxZoom: 20, attribution: "&copy; OpenStreetMap contributors & Carto" });
 
     const map = L.map("map", { zoomSnap: 0.5, layers: [osmStd] }).setView([52.23, 21.01], 6);
-    L.control.layers(
-      { "OSM Standard": osmStd, "Carto Light": cartoLight },
-      null,
-      { position: "topleft", collapsed: true }
-    ).addTo(map);
-
-    // invalidateSize на случай отложенной отрисовки
+    L.control.layers({ "OSM Standard": osmStd, "Carto Light": cartoLight }, null, { position: "topleft", collapsed: true }).addTo(map);
     setTimeout(() => map.invalidateSize(), 50);
     window.addEventListener("resize", () => map.invalidateSize());
 
-    // ==== Иконки ====
+    // === Иконки и слои ===
     const iconDot = (cls) => L.divIcon({ className: "marker", html:`<span class="dot ${cls}"></span>`, iconSize:[16,16], iconAnchor:[8,8] });
-
-    // ==== Слои ====
     const clusterService = L.markerClusterGroup({ disableClusteringAtZoom: 13 });
     const clusterRepair  = L.markerClusterGroup({ disableClusteringAtZoom: 13 });
-    map.addLayer(clusterService);
-    map.addLayer(clusterRepair);
+    map.addLayer(clusterService); map.addLayer(clusterRepair);
 
-    // ==== UI ====
+    // === UI ===
     const elRadius = document.getElementById("radiusKm");
     const elCbService = document.getElementById("cbService");
     const elCbRepair  = document.getElementById("cbRepair");
-    const elPoiCount  = document.getElementById("poiCount");
-    const elPoiBody   = document.getElementById("poiBody");
-    const elPoiToggle = document.getElementById("poiToggle");
-    const elPoiArrow  = document.getElementById("poiArrow");
     const elCountryInfo = document.getElementById("countryInfo");
     const elRestrictionsBody = document.getElementById("restrictionsBody");
 
-    let poiCollapsed = false;
-    elPoiToggle.addEventListener("click", () => {
-      poiCollapsed = !poiCollapsed;
-      elPoiBody.style.maxHeight = poiCollapsed ? "0px" : "220px";
-      elPoiArrow.textContent = poiCollapsed ? "▼" : "▲";
-    });
-
-    // ==== Helpers ====
-    const overpass = q => fetch("https://overpass-api.de/api/interpreter?data="+encodeURIComponent(q)).then(r=>r.json());
+    // === Overpass helper с резервом ===
+    async function overpass(query){
+      const endpoints = [
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter"
+      ];
+      for (const ep of endpoints){
+        try{
+          const r = await fetch(ep+"?data="+encodeURIComponent(query), { timeout: 30000 });
+          if (r.ok) return await r.json();
+        }catch(_){}
+      }
+      return { elements: [] };
+    }
     const radiusM = () => Math.min(300000, Math.max(5000, +elRadius.value*1000));
     function toLatLng(el){ if(el.type==="node")return[el.lat,el.lon]; if(el.center)return[el.center.lat,el.center.lon]; return null; }
+
     function popupFromTags(t){
       const name = t.name || "Без названия";
       let s = `<b>${name}</b><br>`;
       if (t.operator) s += `${t.operator}<br>`;
       if (t.brand) s += `Бренд: ${t.brand}<br>`;
-      const phone = t.phone || t["contact:phone"];
+      const phone = t.phone || t["contact:phone"];            // <-- фикс
       if (phone) s += `📞 ${phone}<br>`;
       if (t.opening_hours) s += `⏰ ${t.opening_hours}<br>`;
       if (t.website) s += `<a href="${t.website}" target="_blank">Сайт</a>`;
       return s;
     }
 
-    function rebuildPoiList(){
-      elPoiBody.innerHTML = "";
-      const items = [];
-      if (elCbService.checked) clusterService.getLayers().forEach(m=>items.push({layer:m,cat:"service",title:m.options._title||"Сервис грузовиков"}));
-      if (elCbRepair.checked)  clusterRepair.getLayers().forEach(m=>items.push({layer:m,cat:"repair", title:m.options._title||"Ремонт/мастерская"}));
-      elPoiCount.textContent = items.length;
-      items.forEach(({layer,cat,title})=>{
-        const div = document.createElement("div");
-        div.className="poi-item";
-        div.innerHTML=`<span class="dot ${cat}"></span>${title}`;
-        div.onclick=()=>{ const ll=layer.getLatLng(); map.setView(ll, Math.max(map.getZoom(),14)); layer.openPopup(); };
-        elPoiBody.appendChild(div);
-      });
-    }
-
-    // ==== Загрузка сервисов ====
+    // === Загрузка сервисов (расширенные теги) ===
     async function loadTruckServices(lat,lon){
       clusterService.clearLayers();
       if(!elCbService.checked) return;
+
       const q = `[out:json][timeout:40];
       (
         node["service:vehicle:truck"="yes"](around:${radiusM()},${lat},${lon});
-        way["service:vehicle:truck"="yes"](around:${radiusM()},${lat},${lon});
-        node["amenity"="truck_service"](around:${radiusM()},${lat},${lon});
-        way["amenity"="truck_service"](around:${radiusM()},${lat},${lon});
+        way ["service:vehicle:truck"="yes"](around:${radiusM()},${lat},${lon});
+        node["amenity"="service_station"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
+        way ["amenity"="service_station"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
+        node["amenity"="vehicle_inspection"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
+        way ["amenity"="vehicle_inspection"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
+        node["truck:service"="yes"](around:${radiusM()},${lat},${lon});
+        way ["truck:service"="yes"](around:${radiusM()},${lat},${lon});
       ); out center tags;`;
+
       const data = await overpass(q);
       (data.elements||[]).forEach(el=>{
         const p = toLatLng(el); if(!p) return;
@@ -199,19 +173,25 @@
       });
     }
 
-    // ==== Загрузка ремонта ====
+    // === Загрузка ремонта (расширенные теги) ===
     async function loadRepair(lat,lon){
       clusterRepair.clearLayers();
       if(!elCbRepair.checked) return;
+
       const q = `[out:json][timeout:40];
       (
         node["shop"="car_repair"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
-        way["shop"="car_repair"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
+        way ["shop"="car_repair"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
+        node["amenity"="car_repair"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
+        way ["amenity"="car_repair"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
         node["shop"="tyres"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
-        way["shop"="tyres"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
+        way ["shop"="tyres"]["hgv"~"^(yes|designated)$"](around:${radiusM()},${lat},${lon});
+        node["repair:truck"="yes"](around:${radiusM()},${lat},${lon});
+        way ["repair:truck"="yes"](around:${radiusM()},${lat},${lon});
         node["truck:repair"="yes"](around:${radiusM()},${lat},${lon});
-        way["truck:repair"="yes"](around:${radiusM()},${lat},${lon});
+        way ["truck:repair"="yes"](around:${radiusM()},${lat},${lon});
       ); out center tags;`;
+
       const data = await overpass(q);
       (data.elements||[]).forEach(el=>{
         const p = toLatLng(el); if(!p) return;
@@ -221,7 +201,7 @@
       });
     }
 
-    // ==== Trafficban-заглушка ====
+    // === Trafficban-заглушка (как было) ===
     const TRAFFICBAN_API_KEY = "";
     async function getCountryByLatLon(lat,lon){
       try{
@@ -233,23 +213,22 @@
     async function loadTrafficBans(lat,lon){
       elRestrictionsBody.innerHTML = `<div class="muted">Загрузка ограничений…</div>`;
       const { country } = await getCountryByLatLon(lat,lon);
-      elCountryInfo.textContent = country ? `— ${country}` : "";
+      document.getElementById("countryInfo").textContent = country ? `— ${country}` : "";
       if(!TRAFFICBAN_API_KEY){
         elRestrictionsBody.innerHTML = `<div class="muted">Вставьте ключ Trafficban API, чтобы отображать реальные правила по стране.</div>`;
         return;
       }
-      // тут будет реальный запрос к Trafficban
+      // здесь будет реальный запрос
     }
 
-    // ==== Общая загрузка ====
+    // === Общая загрузка ===
     async function loadAll(lat,lon){
       await loadTruckServices(lat,lon);
       await loadRepair(lat,lon);
-      rebuildPoiList();
       await loadTrafficBans(lat,lon);
     }
 
-    // ==== Геолокация/кнопки ====
+    // === Геолокация/кнопки ===
     async function locateUser(){
       if(!navigator.geolocation) return null;
       return new Promise(res=>{
@@ -268,7 +247,6 @@
     document.getElementById("btnReload").onclick = async ()=>{
       const c = map.getCenter(); await loadAll(c.lat, c.lng);
     };
-
     [elCbService, elCbRepair].forEach(cb=>{
       cb.addEventListener("change", async ()=>{
         const c = map.getCenter();
@@ -277,11 +255,9 @@
         await loadAll(c.lat, c.lng);
       });
     });
-    elRadius.addEventListener("change", async ()=>{
+    document.getElementById("radiusKm").addEventListener("change", async ()=>{
       const c = map.getCenter(); await loadAll(c.lat, c.lng);
     });
-
-    // Обновлять панель ограничений при смещении центра
     let tbTimer=null;
     map.on("moveend", ()=>{
       if(tbTimer) clearTimeout(tbTimer);
@@ -290,7 +266,7 @@
       }, 600);
     });
 
-    // ==== Старт ====
+    // === Старт ===
     (async ()=>{
       const c = map.getCenter();
       await loadAll(c.lat, c.lng);
