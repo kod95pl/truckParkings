@@ -37,6 +37,32 @@
       display:flex; gap:16px; align-items:center; flex-wrap:wrap;
     }
     .legend .item { display:flex; align-items:center; gap:8px; white-space:nowrap; }
+    .legend header {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:4px 8px;
+      border-bottom:1px solid #eee;
+      cursor:pointer;
+    }
+    .legend .caret {
+      border:1px solid #ddd;
+      border-radius:8px;
+      background:#fff;
+      padding:2px 8px;
+      font-size:12px;
+    }
+    .legend.collapsed .body {
+      max-height:0;
+      overflow:hidden;
+      opacity:0;
+      padding:0;
+      transition:all .3s ease;
+    }
+    .legend .body {
+      transition:all .3s ease;
+      padding:8px 12px;
+    }
 
     /* Our dot chip (applies to markers and legend). Keep it explicit so nothing collapses. */
     .tw-dot { width:14px; height:14px; border-radius:50%; display:inline-block; border:2px solid #333; }
@@ -74,13 +100,21 @@
   </div>
 
   <!-- Legend (bottom) -->
-  <div class="legend">
-    <div class="item"><span class="tw-dot service"></span> Сервис (OSM)</div>
-    <div class="item"><span class="tw-dot repair"></span> Ремонт / шины (OSM)</div>
-    <div class="item"><span class="tw-dot parking"></span> Паркинг TIR (MapTrip)</div>
-    <div class="item"><span class="tw-dot fuel"></span> АЗС Diesel (MapTrip)</div>
-    <div class="item"><span class="tw-dot roadpt"></span> Дорожные работы</div>
+    <!-- Legend (bottom, collapsible) -->
+  <div class="legend" id="panelLegend">
+    <header>
+      <strong>Легенда</strong>
+      <button id="toggleLegend" class="caret">▼</button>
+    </header>
+    <div class="body">
+      <div class="item"><span class="tw-dot service"></span> Сервис (OSM)</div>
+      <div class="item"><span class="tw-dot repair"></span> Ремонт / шины (OSM)</div>
+      <div class="item"><span class="tw-dot parking"></span> Паркинг TIR (MapTrip)</div>
+      <div class="item"><span class="tw-dot fuel"></span> АЗС Diesel (MapTrip)</div>
+      <div class="item"><span class="tw-dot roadpt"></span> Дорожные работы</div>
+    </div>
   </div>
+
 
   <script>
   /* ===================== CONFIG ===================== */
@@ -422,6 +456,17 @@
     const p = originalProject.call(this, latlng);
     p.x += 0.0000001; p.y += 0.0000001; return p;
   };
+
+  /* ===== COLLAPSIBLE LEGEND ===== */
+  const legendPanel = document.getElementById("panelLegend");
+  const toggleLegend = document.getElementById("toggleLegend");
+  if (legendPanel && toggleLegend){
+    toggleLegend.addEventListener("click", ()=>{
+      legendPanel.classList.toggle("collapsed");
+      toggleLegend.textContent = legendPanel.classList.contains("collapsed") ? "▲" : "▼";
+    });
+  }
+
   </script>
 </body>
 </html>
