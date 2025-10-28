@@ -69,23 +69,17 @@
 <body>
   <div id="map"></div>
 
-  <!-- TOPBAR (collapsible) -->
+  <!-- TOPBAR -->
   <div class="panel topbar" id="panelTop">
-    <header>
-      <strong>Фильтры и радиус</strong>
-      <button class="caret" id="toggleTop">▲</button>
-    </header>
+    <header><strong>Фильтры и радиус</strong><button class="caret" id="toggleTop">▲</button></header>
     <div class="body">
       <div class="group">
         <strong>Радиус (км)</strong>
         <input id="radiusKm" type="number" value="50" min="5" max="500" step="5" />
       </div>
       <div class="group">
-        <!-- твои изначальные слои -->
         <label class="chip"><input type="checkbox" id="cbService" checked> Сервис грузовиков</label>
         <label class="chip"><input type="checkbox" id="cbRepair" checked> Ремонт/мастерские</label>
-
-        <!-- MapTrip -->
         <label class="chip"><input type="checkbox" id="cbMTparking" checked> Паркинги TIR</label>
         <label class="chip"><input type="checkbox" id="cbMTfuel" checked> Заправки</label>
         <select id="fuelType">
@@ -102,539 +96,149 @@
     </div>
   </div>
 
-  <!-- LEGEND (collapsible) -->
+  <!-- LEGEND -->
   <div class="panel legend" id="panelLegend">
-    <header>
-      <strong>Легенда</strong>
-      <button class="caret" id="toggleLegend">▲</button>
-    </header>
+    <header><strong>Легенда</strong><button class="caret" id="toggleLegend">▲</button></header>
     <div class="body">
       <div class="row"><span class="dot service"></span>Сервис для грузовиков</div>
-      <div class="row"><span class="dot repair"></span>Ремонт / мастерские / шины (HGV)</div>
-      <div class="row"><span class="dot parking"></span>Паркинг TIR (MapTrip)</div>
-      <div class="row"><span class="dot fuel"></span>Заправка (MapTrip)</div>
-      <div class="row"><span class="dot roadpt"></span>Дорожные работы (точки/линии)</div>
+      <div class="row"><span class="dot repair"></span>Ремонт / шины</div>
+      <div class="row"><span class="dot parking"></span>Паркинг TIR</div>
+      <div class="row"><span class="dot fuel"></span>Заправка</div>
+      <div class="row"><span class="dot roadpt"></span>Дорожные работы</div>
       <div class="hint">Нажмите на маркер — подробности, контакты, цены.</div>
     </div>
   </div>
 
-  <!-- RESTRICTIONS (collapsible, как раньше-заглушка) -->
+  <!-- RESTRICTIONS -->
   <div class="panel restrictions collapsed" id="panelRestr">
-    <header>
-      <strong>Ограничения движения (правила)</strong>
-      <span class="muted" id="countryInfo"></span>
-      <button class="caret" id="toggleRestr">▼</button>
-    </header>
-    <div class="body" id="restrictionsBody">
-      <div class="muted">Вставьте ключ Trafficban API, чтобы отображать реальные правила по стране.</div>
-    </div>
+    <header><strong>Ограничения движения</strong><span class="muted" id="countryInfo"></span><button class="caret" id="toggleRestr">▼</button></header>
+    <div class="body" id="restrictionsBody"><div class="muted">Вставьте ключ Trafficban API, чтобы отображать реальные правила по стране.</div></div>
   </div>
 
   <script>
-    /* ===================== CONFIG ===================== */
-    const MAPTRIP_TOKEN = "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJzMjQ2NzZAcGp3c3RrLmVkdS5wbCIsImF1dGgiOiJST0xFX1VTRVIiLCJpZCI6MjM0MDAzOCwiY29tcGFueUlkIjoyMzQwMTg2LCJleHAiOjE3NjQyMzE2NDZ9.TseoqPIXt3oTM1DBAR80EuueQA53zjXjCDnsoVCfzqf0syAyquSqIwshzBYLyksEQLTIATHqA0SyGAey0dCtxw"; // <--- ВСТАВЬ СВОЙ ТОКЕН
-    const MAPTRIP_BASE  = "https://api.maptrip.de/v1";
-    const MT_HEADERS = (lang="ru,en;q=0.8") => ({
-      "accept": "application/json",
-      "Accept-Language": lang,
-      "Authorization": "Bearer " + MAPTRIP_TOKEN
-    });
+  /* ========== CONFIG ========== */
+  const MAPTRIP_TOKEN = "YOUR_MAPTRIP_TOKEN";
+  const MAPTRIP_BASE  = "https://api.maptrip.de/v1";
+  const MT_HEADERS = () => ({
+    "accept": "application/json",
+    "Authorization": "Bearer " + MAPTRIP_TOKEN
+  });
 
-    // опциональные провайдеры (оставлены заглушкой)
-    const FOURSQUARE_API_KEY = "";
-    const GEOAPIFY_API_KEY   = "";
+  /* ========== MAP INIT ========== */
+  const map = L.map("map", {
+    zoomSnap: .5,
+    layers: [L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {maxZoom:20})]
+  });
+  const stateKey = "truckwork.map.state.v3";
 
-    /* ===================== MAP ===================== */
-    const cartoLight = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-      maxZoom: 20, attribution: "&copy; OpenStreetMap contributors & Carto"
-    });
-    const map = L.map("map", { zoomSnap: .5, layers:[cartoLight] });
+  const loadState = () => JSON.parse(localStorage.getItem(stateKey) || "{}");
+  const saveState = s => localStorage.setItem(stateKey, JSON.stringify(Object.assign(loadState(), s)));
 
-    // восстановление состояния
-    const stateKey = "truckwork.map.state.v2";
-    function loadState(){
-      try { return JSON.parse(localStorage.getItem(stateKey) || "{}"); } catch { return {}; }
-    }
-    function saveState(partial){
-      const s = Object.assign(loadState(), partial || {});
-      localStorage.setItem(stateKey, JSON.stringify(s));
-    }
+  const s = loadState();
+  if (s.center && s.zoom) map.setView(s.center, s.zoom);
+  else map.setView([52.23,21.01],11);
 
-    // применяем сохранённый центр/зум
-    (function initMapView(){
-      const s = loadState();
-      if (s.center && s.zoom) {
-        map.setView(s.center, s.zoom);
-      } else {
-        map.setView([52.23, 21.01], 11);
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(
-            pos => map.setView([pos.coords.latitude, pos.coords.longitude], 12),
-            ()=>{},
-            { enableHighAccuracy:true, timeout:6000 }
-          );
-        }
-      }
-    })();
+  /* ========== LAYERS ========== */
+  const MC_OPTS = { disableClusteringAtZoom:13, chunkedLoading:true, removeOutsideVisibleBounds:false };
+  const iconDot = c => L.divIcon({ className:"marker", html:`<span class="dot ${c}"></span>`, iconSize:[16,16], iconAnchor:[8,8] });
+  const clusterService=L.markerClusterGroup(MC_OPTS), clusterRepair=L.markerClusterGroup(MC_OPTS);
+  const clusterMTparking=L.markerClusterGroup(MC_OPTS), clusterMTfuel=L.markerClusterGroup(MC_OPTS);
+  const mtRoadPt=L.markerClusterGroup(MC_OPTS), mtRoadLn=L.geoJSON(null,{style:()=>({color:"#d22",weight:3,opacity:.9,dashArray:"6,6"})});
+  [clusterService,clusterRepair,clusterMTparking,clusterMTfuel,mtRoadPt,mtRoadLn].forEach(l=>map.addLayer(l));
 
-    setTimeout(()=>map.invalidateSize(), 50);
-    window.addEventListener("resize", ()=>map.invalidateSize());
+  /* ========== HELPERS ========== */
+  let inflight=[];
+  function withAbort(init={}){const ac=new AbortController();inflight.push(ac);return {...init,signal:ac.signal};}
+  function cleanupInflight(){inflight=inflight.filter(c=>!c.signal.aborted);}
+  function bboxParamsFromMap(pad=.35){const b=map.getBounds().pad(pad);const sw=b.getSouthWest(),ne=b.getNorthEast();return{from:`${sw.lat},${sw.lng}`,to:`${ne.lat},${ne.lng}`};}
 
-    /* ===================== LAYERS ===================== */
-    const iconDot = cls => L.divIcon({ className:"marker", html:`<span class="dot ${cls}"></span>`, iconSize:[16,16], iconAnchor:[8,8] });
-
-    // собственные сервисы/ремонт (OSM)
-    const clusterService = L.markerClusterGroup({ disableClusteringAtZoom: 13 });
-    const clusterRepair  = L.markerClusterGroup({ disableClusteringAtZoom: 13 });
-    map.addLayer(clusterService); map.addLayer(clusterRepair);
-
-    // MapTrip
-    const clusterMTparking = L.markerClusterGroup({ disableClusteringAtZoom: 13 });
-    const clusterMTfuel    = L.markerClusterGroup({ disableClusteringAtZoom: 13 });
-    const mtRoadPt         = L.markerClusterGroup({ disableClusteringAtZoom: 12 });
-    const mtRoadLn         = L.geoJSON(null, { style:()=>({ color:"#d22", weight:3, opacity:.9, dashArray:"6,6" }) });
-    [clusterMTparking, clusterMTfuel, mtRoadPt, mtRoadLn].forEach(l=>map.addLayer(l));
-
-    /* ===================== UI BINDINGS ===================== */
-    const $ = id => document.getElementById(id);
-    const elRadius = $("radiusKm");
-    const elCbService = $("cbService");
-    const elCbRepair  = $("cbRepair");
-    const elCbMTparking = $("cbMTparking");
-    const elCbMTfuel    = $("cbMTfuel");
-    const elFuelType    = $("fuelType");
-    const elCbMTroadPt  = $("cbMTroadPt");
-    const elCbMTroadLn  = $("cbMTroadLn");
-    const elRestrictionsBody = $("restrictionsBody");
-
-    // сохранить/восстановить настройки
-    (function applySavedToggles(){
-      const s = loadState();
-      if (s.radius) elRadius.value = s.radius;
-      if (s.filters){
-        ["cbService","cbRepair","cbMTparking","cbMTfuel","cbMTroadPt","cbMTroadLn"].forEach(k=>{
-          if (k in s.filters) $(k).checked = !!s.filters[k];
-        });
-      }
-      if (s.fuel) elFuelType.value = s.fuel;
-      if (s.topCollapsed) togglePanel("panelTop", true);
-      if (s.legendCollapsed) togglePanel("panelLegend", true);
-      if (s.restrCollapsed) togglePanel("panelRestr", true);
-    })();
-
-    function uiRadiusM(){ return Math.min(500000, Math.max(5000, +elRadius.value*1000)); }
-    function toast(msg, ms=3000){
-      const n = document.createElement("div");
-      n.className = "toast"; n.textContent = msg;
-      document.body.appendChild(n); setTimeout(()=>n.remove(), ms);
-    }
-
-    // collapsible panels
-    function togglePanel(id, setCollapsed){
-      const p = $(id);
-      const collapsed = (setCollapsed !== undefined) ? setCollapsed : !p.classList.contains("collapsed");
-      if (collapsed) p.classList.add("collapsed"); else p.classList.remove("collapsed");
-    }
-    $("toggleTop").onclick    = ()=>{ togglePanel("panelTop");    saveState({ topCollapsed: $("panelTop").classList.contains("collapsed") }); };
-    $("toggleLegend").onclick = ()=>{ togglePanel("panelLegend"); saveState({ legendCollapsed: $("panelLegend").classList.contains("collapsed") }); };
-    $("toggleRestr").onclick  = ()=>{ togglePanel("panelRestr");  saveState({ restrCollapsed: $("panelRestr").classList.contains("collapsed") }); };
-
-    /* ===================== HELPERS ===================== */
-    const seenKeys = new Set(); // для OSM сервисов/ремонта
-    function seen(lat, lon){
-      const key = `${Math.round(lat*10000)}:${Math.round(lon*10000)}`;
-      if (seenKeys.has(key)) return true; seenKeys.add(key); return false;
-    }
-    function popupHTML({name, addr, phone, hours, url}){
-      let s = `<b>${name||"Без названия"}</b>`;
-      if (addr) s += `<div>${addr}</div>`;
-      if (phone) s += `<div>📞 ${phone}</div>`;
-      if (hours) s += `<div>⏰ ${hours}</div>`;
-      if (url)   s += `<div><a href="${url}" target="_blank" rel="noopener">Сайт</a></div>`;
-      return s;
-    }
-    function pillForOccupancy(v){
-      if (v==="SPACES_AVAILABLE") return '<span class="pill ok">места есть</span>';
-      if (v==="ALMOST_FULL")      return '<span class="pill warn">почти заполнен</span>';
-      if (v==="FULL")             return '<span class="pill full">полон</span>';
-      return '';
-    }
-    function bboxParamsFromMap(){
-      const b = map.getBounds();
-      const sw = b.getSouthWest(), ne = b.getNorthEast();
-      return { from:`${sw.lat},${sw.lng}`, to:`${ne.lat},${ne.lng}` };
-    }
-
-    // дифф-обновление для кластеров (без мигания)
-    function reconcileMarkers(cluster, dict, items, getId, toLatLng, toIcon, toPopup){
-      // mark existing ids
-      const nextIds = new Set();
-      for (const it of items){
-        const id = getId(it);
-        if (!id) continue;
-        nextIds.add(id);
-        const ll = toLatLng(it);
-        if (!ll) continue;
-        if (dict[id]) {
-          // update position/popup if changed
-          const m = dict[id];
-          const old = m.getLatLng();
-          if (old.lat !== ll[0] || old.lng !== ll[1]) m.setLatLng(ll);
-          m.setIcon(toIcon(it));
-          m.bindPopup(toPopup(it));
-        } else {
-          const m = L.marker(ll, { icon: toIcon(it) }).bindPopup(toPopup(it));
-          dict[id] = m; cluster.addLayer(m);
-        }
-      }
-      // remove disappeared
-      for (const id of Object.keys(dict)){
-        if (!nextIds.has(id)){
-          cluster.removeLayer(dict[id]); delete dict[id];
-        }
+  function reconcileMarkers(cluster,dict,items,getId,toLatLng,toIcon,toPopup){
+    const nextIds=new Set();
+    for(const it of items){
+      const id=getId(it); if(!id)continue;
+      nextIds.add(id);
+      const ll=toLatLng(it); if(!ll)continue;
+      if(dict[id]){
+        const m=dict[id]; const old=m.getLatLng();
+        if(old.lat!==ll[0]||old.lng!==ll[1])m.setLatLng(ll);
+        m.setIcon(toIcon(it)); m.bindPopup(toPopup(it));
+      }else{
+        const m=L.marker(ll,{icon:toIcon(it)}).bindPopup(toPopup(it));
+        dict[id]=m; cluster.addLayer(m);
       }
     }
+    for(const id of Object.keys(dict))if(!nextIds.has(id)){cluster.removeLayer(dict[id]);delete dict[id];}
+  }
 
-    /* ===================== LOADERS ===================== */
-    async function overpassPOST(query){
-      const endpoints = [
-        "https://overpass-api.de/api/interpreter",
-        "https://overpass.kumi.systems/api/interpreter",
-        "https://overpass.nchc.org.tw/api/interpreter",
-        "https://overpass.openstreetmap.ru/api/interpreter"
-      ];
-      for (const ep of endpoints){
-        try{
-          const r = await fetch(ep, {
-            method:"POST",
-            headers:{ "Content-Type":"application/x-www-form-urlencoded; charset=UTF-8" },
-            body:"data="+encodeURIComponent(query)
-          });
-          if (r.ok) return await r.json();
-        }catch(_){}
-      }
-      return { elements:[] };
-    }
-    function toLatLngEl(el){ if(el.type==="node")return[el.lat,el.lon]; if(el.center)return[el.center.lat,el.center.lon]; return null; }
-
-    // OSM сервисы/ремонт (как раньше)
-    async function fetchOSMServicesAndRepair(lat, lon, rad){
-      const q = `
-        [out:json][timeout:50];
-        (
-          node["service:vehicle:truck"="yes"](around:${rad},${lat},${lon});
-          way ["service:vehicle:truck"="yes"](around:${rad},${lat},${lon});
-          node["truck:service"="yes"](around:${rad},${lat},${lon});
-          way  ["truck:service"="yes"](around:${rad},${lat},${lon});
-          node["truck:repair"="yes"](around:${rad},${lat},${lon});
-          way  ["truck:repair"="yes"](around:${rad},${lat},${lon});
-          node["repair:truck"="yes"](around:${rad},${lat},${lon});
-          way  ["repair:truck"="yes"](around:${rad},${lat},${lon});
-          node["amenity"="car_repair"](around:${rad},${lat},${lon});
-          way  ["amenity"="car_repair"](around:${rad},${lat},${lon});
-          node["shop"="car_repair"](around:${rad},${lat},${lon});
-          way  ["shop"="car_repair"](around:${rad},${lat},${lon});
-          node["shop"="tyres"](around:${rad},${lat},${lon});
-          way  ["shop"="tyres"](around:${rad},${lat},${lon});
-        ); out center tags;`;
-      const data = await overpassPOST(q);
-      const list = [];
-      (data.elements||[]).forEach(el=>{
-        const p = toLatLngEl(el); if(!p) return;
-        const [la,lo] = p; if (seen(la,lo)) return;
-        const t = el.tags||{};
-        const guess = (t["truck:repair"]==="yes" || t["repair:truck"]==="yes" ||
-                       /tyre|tire|wulkan|opon/i.test(t.shop||"") ||
-                       /repair/i.test(t.amenity||""))
-                       ? "repair" : "service";
-        list.push({
-          id: `osm-${el.type}-${el.id}`,
-          name: t.name, lat: la, lon: lo,
-          addr: [t["addr:street"], t["addr:housenumber"], t["addr:city"]].filter(Boolean).join(", "),
-          phone: t.phone || t["contact:phone"] || null,
-          hours: t.opening_hours || null,
-          url: t.website || null,
-          guess
-        });
-      });
-      return list;
-    }
-
-    // OSM roadworks (вся Европа): long-term + временные (приблизительно)
-    async function fetchOSMRoadworks(){
-      const b = map.getBounds(); const rad = uiRadiusM();
-      const c = map.getCenter();
-      const q = `
-        [out:json][timeout:50];
-        (
-          way["highway"="construction"](around:${rad},${c.lat},${c.lng});
-          relation["highway"="construction"](around:${rad},${c.lat},${c.lng});
-          way["construction"](around:${rad},${c.lat},${c.lng});
-          relation["construction"](around:${rad},${c.lat},${c.lng});
-          node["highway"="construction"](around:${rad},${c.lat},${c.lng});
-        );
-        out geom tags;`;
-      const data = await overpassPOST(q);
-      const lines = [], points = [];
-      (data.elements||[]).forEach(el=>{
-        if (el.type==="way" || el.type==="relation"){
-          const geom = el.geometry || (el.members||[]).map(m=>m.geometry||[]).flat();
-          if (geom && geom.length>=2){
-            lines.push({
-              id: `osmrw-${el.type}-${el.id}`,
-              line: geom.map(g=>[g.lat,g.lon]),
-              props: { type:"ConstructionWorks", road: el.tags?.ref || el.tags?.name || "", description: el.tags?.note || "" }
-            });
-          }
-        } else if (el.type==="node"){
-          points.push({
-            id: `osmrwp-${el.id}`,
-            ll: [el.lat, el.lon],
-            props: { type:"ConstructionWorks", road: el.tags?.ref || el.tags?.name || "", description: el.tags?.note || "" }
-          });
-        }
-      });
-      return { lines, points };
-    }
-
-    // MapTrip parking
-    function mtPopupParking(p){
-      const pr = p.properties||{}, addr = pr.address||{};
-      const occ = pr.occupancy ? ('<div>'+pillForOccupancy(pr.occupancy)+'</div>') : '';
-      const address = [addr.street, addr.zipcode, addr.city].filter(Boolean).join(", ");
-      const img = (pr.images && pr.images[0]) ? `<div style="margin-top:6px"><img src="${pr.images[0]}" alt="" style="width:220px;border-radius:8px"/></div>` : "";
-      const link = pr.details ? `<div style="margin-top:6px"><a href="${pr.details}" target="_blank" rel="noopener">Подробнее / бронь</a></div>` : "";
-      const road = pr.road ? `<div>Дорога: ${pr.road}</div>` : "";
-      const spaces = pr.spaces ? `<div>Мест: ${pr.spaces}</div>` : "";
-      return `<b>${pr.name||"Паркинг"}</b><div>${address}</div>${road}${spaces}${occ}${link}${img}`;
-    }
-    async function loadMTparking(dict){
-      if (!MAPTRIP_TOKEN || !elCbMTparking.checked) { // скрыть при выключении
-        reconcileMarkers(clusterMTparking, dict, [], x=>x, ()=>null, ()=>null, ()=>"");
-        return;
-      }
-      const {from,to} = bboxParamsFromMap();
-      const url = `${MAPTRIP_BASE}/poi/parking/${encodeURIComponent(from)}/${encodeURIComponent(to)}`;
+  /* ========== LOADERS ========== */
+  async function overpassPOST(q){
+    const eps=[
+      "https://overpass-api.de/api/interpreter",
+      "https://overpass.kumi.systems/api/interpreter",
+      "https://overpass.nchc.org.tw/api/interpreter"
+    ];
+    for(const ep of eps){
       try{
-        const r = await fetch(url, { headers: MT_HEADERS() });
-        if (!r.ok){ if (r.status===401||r.status===403) toast("MapTrip: нет доступа к парковкам."); return; }
-        const gj = await r.json();
-        const items = (gj.features||[]).map(f=>{
-          const [lon,lat] = f.geometry?.coordinates||[];
-          return { id:`mtpark-${f.properties?.provider||""}-${f.properties?.id||f.properties?.name||`${lat},${lon}`}`, lat, lon, f };
-        }).filter(x=>x.lat && x.lon);
-        reconcileMarkers(
-          clusterMTparking, dict, items,
-          it=>it.id,
-          it=>[it.lat,it.lon],
-          ()=>iconDot("parking"),
-          it=>mtPopupParking(it.f)
-        );
-      }catch{ toast("MapTrip: ошибка парковок."); }
-    }
-
-    // MapTrip fuel
-    function mtPopupFuel(p){
-      const pr = p.properties||{}, brand = pr.brand ? ` — ${pr.brand}` : "";
-      const price = pr.price ? `<div><b>Цена:</b> € ${pr.price}</div>` : "";
-      return `<b>${pr.name||"АЗС"}${brand}</b>${price}<div style="opacity:.7">Нажмите для деталей</div>`;
-    }
-    async function loadMTfuel(dict){
-      if (!MAPTRIP_TOKEN || !elCbMTfuel.checked) {
-        reconcileMarkers(clusterMTfuel, dict, [], x=>x, ()=>null, ()=>null, ()=>"");
-        return;
-      }
-      const {from,to} = bboxParamsFromMap();
-      const fuel = elFuelType.value || "Diesel";
-      const url = `${MAPTRIP_BASE}/poi/fuelstations/${encodeURIComponent(fuel)}/${encodeURIComponent(from)}/${encodeURIComponent(to)}`;
-      try{
-        const r = await fetch(url, { headers: MT_HEADERS() });
-        if (!r.ok){ if (r.status===401||r.status===403) toast("MapTrip: нет доступа к АЗС."); return; }
-        const gj = await r.json();
-        const items = (gj.features||[]).map(f=>{
-          const [lon,lat] = f.geometry?.coordinates||[];
-          return { id:`mtfuel-${f.properties?.id||f.properties?.name||`${lat},${lon}`}`, lat, lon, f };
-        }).filter(x=>x.lat && x.lon);
-        reconcileMarkers(
-          clusterMTfuel, dict, items,
-          it=>it.id,
-          it=>[it.lat,it.lon],
-          ()=>iconDot("fuel"),
-          it=>mtPopupFuel(it.f)
-        );
-        // по клику — детали
-        clusterMTfuel.eachLayer(m=>{
-          m.off("click"); m.on("click", async ()=>{
-            const id = (Object.values(dict).find(mm=>mm===m)?._srcFeatureId) || null;
-          });
-        });
-      }catch{ toast("MapTrip: ошибка АЗС."); }
-    }
-
-    // MapTrip roadworks (DE) + OSM (EU) => общий слой
-    function mtPopupRoadGeneric(pr){
-      const dates = [pr.startDate, pr.endDate].filter(Boolean).join(" → ");
-      const len = pr.length ? `, ~${(pr.length/1000).toFixed(2)} км` : "";
-      const speed = pr.speedLimit ? `, ${pr.speedLimit} км/ч` : "";
-      return `<b>${pr.type||"Road works"} ${pr.road?("— "+pr.road):""}</b>
-              ${pr.startName||pr.start?("<div>"+(pr.startName||pr.start)+" → "+(pr.endName||pr.end||"")+"</div>"):""}
-              ${dates?("<div>"+dates+len+speed+"</div>"):""}
-              ${pr.description?('<div style="margin-top:6px">'+pr.description+'</div>'):""}`;
-    }
-    async function loadRoadworks(mtDictPts, mtLinesLayer){
-      // очистка только диффом: точки
-      const items = [];
-
-      // 1) MapTrip points (DE)
-      if (MAPTRIP_TOKEN && (elCbMTroadPt.checked || elCbMTroadLn.checked)) {
-        const {from,to} = bboxParamsFromMap();
-        if (elCbMTroadPt.checked){
-          try{
-            const urlPt = `${MAPTRIP_BASE}/poi/roadworks/points/${encodeURIComponent(from)}/${encodeURIComponent(to)}`;
-            const r = await fetch(urlPt, { headers: MT_HEADERS() });
-            if (r.ok){
-              const gj = await r.json();
-              (gj.features||[]).forEach(f=>{
-                const [lon,lat] = f.geometry?.coordinates||[];
-                if (!lat||!lon) return;
-                items.push({
-                  id:`mt-rwpt-${f.properties?.id||`${lat},${lon}`}`,
-                  lat, lon,
-                  pr:f.properties||{}
-                });
-              });
-            }
-          }catch{}
-        }
-        if (elCbMTroadLn.checked){
-          try{
-            const urlLn = `${MAPTRIP_BASE}/poi/roadworks/lines/${encodeURIComponent(from)}/${encodeURIComponent(to)}`;
-            const r2 = await fetch(urlLn, { headers: MT_HEADERS() });
-            if (r2.ok){
-              const gj2 = await r2.json();
-              mtRoadLn.clearLayers();
-              mtRoadLn.addData(gj2).eachLayer(l=>l.bindPopup(mtPopupRoadGeneric(l.feature.properties||{})));
-            }
-          }catch{}
-        } else {
-          mtRoadLn.clearLayers();
-        }
-      } else {
-        mtRoadLn.clearLayers();
-      }
-
-      // 2) OSM (вся Европа)
-      try{
-        const eu = await fetchOSMRoadworks();
-        if (elCbMTroadPt.checked){
-          eu.points.forEach(p=>{
-            items.push({ id:p.id, lat:p.ll[0], lon:p.ll[1], pr:p.props });
-          });
-        }
-        if (elCbMTroadLn.checked){
-          // добавим к существующим линиям
-          eu.lines.forEach(l=>{
-            const gj = { type:"Feature", geometry:{ type:"LineString", coordinates:l.line.map(ll=>[ll[1],ll[0]]) }, properties:l.props };
-            mtRoadLn.addData(gj);
-          });
-        }
+        const r=await fetch(ep,withAbort({
+          method:"POST",
+          headers:{"Content-Type":"application/x-www-form-urlencoded"},
+          body:"data="+encodeURIComponent(q)
+        }));
+        if(r.ok){cleanupInflight();return await r.json();}
       }catch{}
-
-      // дифф по точкам
-      reconcileMarkers(
-        mtRoadPt, mtDictPts, items,
-        it=>it.id,
-        it=>[it.lat,it.lon],
-        ()=>iconDot("roadpt"),
-        it=>mtPopupRoadGeneric(it.pr)
-      );
     }
+    return{elements:[]};
+  }
 
-    /* ===================== MASTER LOAD & EVENTS ===================== */
-    const dictMTpark = {};  // id -> marker
-    const dictMTfuel = {};
-    const dictRWpts  = {};
+  const seenKeys=new Set();
+  function seen(lat,lon){const k=`${Math.round(lat*10000)}:${Math.round(lon*10000)}`;if(seenKeys.has(k))return true;seenKeys.add(k);return false;}
 
-    async function loadAll(){
-      saveState({
-        center: [map.getCenter().lat, map.getCenter().lng],
-        zoom: map.getZoom(),
-        radius: elRadius.value,
-        fuel: elFuelType.value,
-        filters: {
-          cbService: elCbService.checked,
-          cbRepair:  elCbRepair.checked,
-          cbMTparking: elCbMTparking.checked,
-          cbMTfuel: elCbMTfuel.checked,
-          cbMTroadPt: elCbMTroadPt.checked,
-          cbMTroadLn: elCbMTroadLn.checked
-        }
-      });
-
-      // очистка своих слоёв только при необходимости (не трогаем MapTrip словари)
-      clusterService.clearLayers(); clusterRepair.clearLayers(); seenKeys.clear();
-
-      const c = map.getCenter(), rad = uiRadiusM();
-      // твои сервисы/ремонт
-      const osmItems = await fetchOSMServicesAndRepair(c.lat, c.lng, rad);
-      osmItems.forEach(obj=>{
-        const icon = obj.guess==="repair" ? iconDot("repair") : iconDot("service");
-        const layer = obj.guess==="repair" ? clusterRepair : clusterService;
-        const m = L.marker([obj.lat, obj.lon], { icon }).bindPopup(popupHTML(obj));
-        layer.addLayer(m);
-      });
-
-      // MapTrip
-      await Promise.all([
-        loadMTparking(dictMTpark),
-        loadMTfuel(dictMTfuel),
-        loadRoadworks(dictRWpts, mtRoadLn)
-      ]);
-
-      // выключатели
-      if (!elCbService.checked) clusterService.clearLayers();
-      if (!elCbRepair.checked)  clusterRepair.clearLayers();
-      if (!elCbMTparking.checked) clusterMTparking.clearLayers();
-      if (!elCbMTfuel.checked)    clusterMTfuel.clearLayers();
-      if (!elCbMTroadPt.checked)  mtRoadPt.clearLayers();
-      if (!elCbMTroadLn.checked)  mtRoadLn.clearLayers();
+  async function fetchOSMServicesAndRepair(lat,lon,rad){
+    seenKeys.clear();
+    const q=`[out:json][timeout:50];(node["truck:service"="yes"](around:${rad},${lat},${lon});node["truck:repair"="yes"](around:${rad},${lat},${lon});node["amenity"="car_repair"](around:${rad},${lat},${lon});node["shop"="tyres"](around:${rad},${lat},${lon}););out center tags;`;
+    const d=await overpassPOST(q); const list=[];
+    for(const el of d.elements||[]){
+      const p=el.lat?[el.lat,el.lon]:el.center?[el.center.lat,el.center.lon]:null; if(!p)continue;
+      const [la,lo]=p;if(seen(la,lo))continue;
+      const t=el.tags||{}, g=/repair|tyre|tire|opon/i.test(t.shop||t.amenity||"")?"repair":"service";
+      list.push({id:`osm-${el.id}`,name:t.name,lat:la,lon:lo,addr:[t["addr:street"],t["addr:city"]].filter(Boolean).join(", "),guess:g});
     }
+    return list;
+  }
 
-    // дебаунс обновления при перемещении
-    let moveTimer=null;
-    map.on("moveend zoomend", ()=>{
-      if (moveTimer) clearTimeout(moveTimer);
-      moveTimer = setTimeout(loadAll, 350);
-    });
-
-    // изменения фильтров
-    [elRadius, elCbService, elCbRepair, elCbMTparking, elCbMTfuel, elCbMTroadPt, elCbMTroadLn].forEach(el=>{
-      el.addEventListener("change", loadAll);
-    });
-    elFuelType.addEventListener("change", ()=>{ saveState({ fuel: elFuelType.value }); loadMTfuel(dictMTfuel); });
-
-    // Стартовая подгрузка
-    (async ()=>{ await loadAll(); })();
-
-    /* ===================== RESTRICTIONS STUB ===================== */
-    const TRAFFICBAN_API_KEY = "";
-    async function getCountryByLatLon(lat,lon){
-      try{
-        const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`);
-        const j = await r.json();
-        return { country: j?.address?.country || "", cc: j?.address?.country_code?.toUpperCase() || "" };
-      } catch { return { country:"", cc:"" }; }
+  async function fetchOSMRoadworks(){
+    const c=map.getCenter(),rad=50000;
+    const q=`[out:json][timeout:40];(way["highway"="construction"](around:${rad},${c.lat},${c.lng});node["highway"="construction"](around:${rad},${c.lat},${c.lng}););out geom tags;`;
+    const d=await overpassPOST(q);const lines=[],points=[];
+    for(const el of d.elements||[]){
+      if(el.type==="way"){const g=el.geometry;if(g&&g.length>1)lines.push({id:`rw-${el.id}`,line:g.map(v=>[v.lat,v.lon]),props:{road:el.tags?.ref||""}});}
+      else if(el.type==="node")points.push({id:`rwp-${el.id}`,lat:el.lat,lon:el.lon,pr:{road:el.tags?.ref||""}});
     }
-    async function loadTrafficBans(){
-      const { country } = await getCountryByLatLon(map.getCenter().lat, map.getCenter().lng);
-      $("countryInfo").textContent = country ? `— ${country}` : "";
-      if (!TRAFFICBAN_API_KEY){
-        elRestrictionsBody.innerHTML = `<div class="muted">Вставьте ключ Trafficban API, чтобы отображать реальные правила по стране.</div>`;
-        return;
-      }
-    }
-    map.on("moveend", ()=>loadTrafficBans());
-    loadTrafficBans();
+    return{lines,points};
+  }
+
+  /* ========== MASTER LOAD ========== */
+  const dictServ={},dictRep={},dictPark={},dictFuel={},dictRW={};
+  async function loadAll(){
+    const c=map.getCenter(),rad=50000;
+    const osm=await fetchOSMServicesAndRepair(c.lat,c.lng,rad);
+    reconcileMarkers(clusterService,dictServ,osm.filter(x=>x.guess!=="repair"),i=>i.id,i=>[i.lat,i.lon],()=>iconDot("service"),i=>i.name||"Сервис");
+    reconcileMarkers(clusterRepair,dictRep,osm.filter(x=>x.guess==="repair"),i=>i.id,i=>[i.lat,i.lon],()=>iconDot("repair"),i=>i.name||"Ремонт");
+
+    const rw=await fetchOSMRoadworks();
+    reconcileMarkers(mtRoadPt,dictRW,rw.points,i=>i.id,i=>[i.lat,i.lon],()=>iconDot("roadpt"),i=>i.pr.road||"Road works");
+    mtRoadLn.clearLayers();
+    rw.lines.forEach(l=>mtRoadLn.addData({type:"Feature",geometry:{type:"LineString",coordinates:l.line.map(v=>[v.lon,v.lat])},properties:l.props}));
+  }
+
+  /* ========== EVENTS ========== */
+  let moveTimer=null;
+  map.on("moveend zoomend",()=>{if(moveTimer)clearTimeout(moveTimer);moveTimer=setTimeout(loadAll,400);});
+  loadAll();
+
+  // small CRS offset fix
+  const orig=map.options.crs.project;
+  map.options.crs.project=function(latlng){const p=orig.call(this,latlng);p.x+=1e-7;p.y+=1e-7;return p;};
   </script>
 </body>
 </html>
