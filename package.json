@@ -1,0 +1,17 @@
+{
+  "name": "truckwork-map",
+  "version": "1.0.0",
+  "description": "Map + MapTrip proxy and POI cache",
+  "main": "server.js",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js",
+    "fetch:parkings": "node fetchParkings.js",
+    "dev": "NODE_ENV=development node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "node-fetch": "^3.4.0",        // optional if you target Node <18; node18+ has global fetch
+    "morgan": "^1.10.0"
+  }
+}
