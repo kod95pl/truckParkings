@@ -16,51 +16,77 @@
     html, body { height:100%; margin:0; }
     #map { position:fixed; inset:0; }
 
+    /* HUD (top-left counters + export) */
     .hud {
       position:absolute; z-index:1000; top:10px; left:10px;
       background:rgba(255,255,255,.96); border:1px solid #eee; border-radius:10px;
       padding:8px 10px; font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
       box-shadow:0 2px 10px rgba(0,0,0,.08);
-      display:flex; align-items:center; gap:8px;
+      display:flex; align-items:center; gap:10px; flex-wrap:wrap;
     }
     .hud button {
       border:1px solid #ddd; background:#fff; border-radius:8px; padding:6px 10px; cursor:pointer;
     }
-    .hud .dot { width:12px; height:12px; border-radius:50%; display:inline-block; border:2px solid #333; vertical-align:-2px; }
-    .dot.service{background:#89b5ff;border-color:#2b6cff;}
-    .dot.repair{background:#ffd3a1;border-color:#c76a00;}
-    .dot.parking{background:#b8f7b1;border-color:#2a7a2a;}
-    .dot.fuel{background:#cde1ff;border-color:#3468ff;}
-    .dot.roadpt{background:#ffd1d1;border-color:#d22;}
+
+    /* Legend (bottom center) */
+    .legend {
+      position:absolute; z-index:1000; left:50%; bottom:10px; transform:translateX(-50%);
+      background:rgba(255,255,255,.96); border:1px solid #eee; border-radius:10px;
+      padding:8px 12px; box-shadow:0 2px 10px rgba(0,0,0,.08);
+      font:13px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+      display:flex; gap:16px; align-items:center; flex-wrap:wrap;
+    }
+    .legend .item { display:flex; align-items:center; gap:8px; white-space:nowrap; }
+
+    /* Our dot chip (applies to markers and legend). Keep it explicit so nothing collapses. */
+    .tw-dot { width:14px; height:14px; border-radius:50%; display:inline-block; border:2px solid #333; }
+    .tw-dot.service{background:#89b5ff;border-color:#2b6cff;}
+    .tw-dot.repair{background:#ffd3a1;border-color:#c76a00;}
+    .tw-dot.parking{background:#b8f7b1;border-color:#2a7a2a;}
+    .tw-dot.fuel{background:#cde1ff;border-color:#3468ff;}
+    .tw-dot.roadpt{background:#ffd1d1;border-color:#d22;}
+
+    /* The divIcon container — make sure it doesn't add unwanted box styles */
+    .tw-marker { background:transparent; border:0; }
 
     .toast {
       position:absolute; left:50%; top:70px; transform:translateX(-50%);
       z-index:1200; background:rgba(255,255,255,.96); border:1px solid #eee; border-radius:10px;
       padding:8px 10px; box-shadow:0 2px 10px rgba(0,0,0,.08); font:13px system-ui;
     }
+
+    /* Prevent UI panels from blocking map clicks outside their bounds */
+    .hud, .legend { pointer-events:auto; }
+    #map { pointer-events:auto; }
   </style>
 </head>
 <body>
   <div id="map"></div>
 
-  <!-- Tiny HUD: counters + export -->
+  <!-- HUD -->
   <div class="hud">
-    <span title="Сервис (OSM)"><span class="dot service"></span> <span id="cntServ">0</span></span>
-    <span title="Ремонт (OSM)"><span class="dot repair"></span> <span id="cntRep">0</span></span>
-    <span title="Паркинг (MapTrip)"><span class="dot parking"></span> <span id="cntPark">0</span></span>
-    <span title="АЗС Diesel (MapTrip)"><span class="dot fuel"></span> <span id="cntFuel">0</span></span>
-    <span title="Дорожные работы (точки)"><span class="dot roadpt"></span> <span id="cntRwPt">0</span></span>
+    <span title="Сервис (OSM)"><span class="tw-dot service"></span> <span id="cntServ">0</span></span>
+    <span title="Ремонт (OSM)"><span class="tw-dot repair"></span> <span id="cntRep">0</span></span>
+    <span title="Паркинг (MapTrip)"><span class="tw-dot parking"></span> <span id="cntPark">0</span></span>
+    <span title="АЗС Diesel (MapTrip)"><span class="tw-dot fuel"></span> <span id="cntFuel">0</span></span>
+    <span title="Дорожные работы (точки)"><span class="tw-dot roadpt"></span> <span id="cntRwPt">0</span></span>
     <button id="btnExport">Export JSON</button>
+  </div>
+
+  <!-- Legend (bottom) -->
+  <div class="legend">
+    <div class="item"><span class="tw-dot service"></span> Сервис (OSM)</div>
+    <div class="item"><span class="tw-dot repair"></span> Ремонт / шины (OSM)</div>
+    <div class="item"><span class="tw-dot parking"></span> Паркинг TIR (MapTrip)</div>
+    <div class="item"><span class="tw-dot fuel"></span> АЗС Diesel (MapTrip)</div>
+    <div class="item"><span class="tw-dot roadpt"></span> Дорожные работы</div>
   </div>
 
   <script>
   /* ===================== CONFIG ===================== */
   const MAPTRIP_TOKEN = "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJzMjQ2NzZAcGp3c3RrLmVkdS5wbCIsImF1dGgiOiJST0xFX1VTRVIiLCJpZCI6MjM0MDAzOCwiY29tcGFueUlkIjoyMzQwMTg2LCJleHAiOjE3NjQyMzE2NDZ9.TseoqPIXt3oTM1DBAR80EuueQA53zjXjCDnsoVCfzqf0syAyquSqIwshzBYLyksEQLTIATHqA0SyGAey0dCtxw";
   const MAPTRIP_BASE  = "https://api.maptrip.de/v1";
-  const MT_HEADERS = {
-    "Accept": "application/json",
-    "Authorization": "Bearer " + MAPTRIP_TOKEN
-  };
+  const MT_HEADERS = { Accept: "application/json", Authorization: "Bearer " + MAPTRIP_TOKEN };
 
   const LS_STATE_KEY = "truckwork.map.state.v4";
   const LS_CACHE_KEY = "truckwork.maptrip.cache.v1";
@@ -70,10 +96,8 @@
     maxZoom: 20, attribution: "© OpenStreetMap & Carto"
   });
   const map = L.map("map", { zoomSnap: .5, layers:[cartoLight] });
-
-  // restore view
   const s = JSON.parse(localStorage.getItem(LS_STATE_KEY) || "{}");
-  if (s.center && s.zoom) map.setView(s.center, s.zoom); else map.setView([52.23, 21.01], 10);
+  if (s.center && s.zoom) map.setView(s.center, s.zoom); else map.setView([51.11, 17.03], 10); // Wrocław as default
   setTimeout(()=>map.invalidateSize(), 50);
 
   window.addEventListener("beforeunload", ()=>{
@@ -82,7 +106,12 @@
   });
 
   /* ===================== LAYERS ===================== */
-  const iconDot = cls => L.divIcon({ className:"", html:`<span class="dot ${cls}"></span>`, iconSize:[16,16], iconAnchor:[8,8] });
+  const iconDot = cls => L.divIcon({
+    className: "tw-marker",
+    html: `<span class="tw-dot ${cls}"></span>`,
+    iconSize: [16,16],
+    iconAnchor: [8,8]
+  });
 
   const MC_OPTS = { disableClusteringAtZoom: 13, chunkedLoading: true, removeOutsideVisibleBounds: false };
   const clService   = L.markerClusterGroup(MC_OPTS);
@@ -110,56 +139,41 @@
   }
 
   /* ===================== CACHING ===================== */
-  // cache of MapTrip features we have ever seen during this session (and from previous sessions)
   const cache = (()=>{
     try { return JSON.parse(localStorage.getItem(LS_CACHE_KEY) || '{"parking":{},"fuel":{}}'); }
     catch { return { parking:{}, fuel:{} }; }
   })();
-
-  function persistCache(){
-    try { localStorage.setItem(LS_CACHE_KEY, JSON.stringify(cache)); } catch{}
-    updateCounts();
-  }
-
-  // export cache to a download JSON
+  function persistCache(){ try { localStorage.setItem(LS_CACHE_KEY, JSON.stringify(cache)); } catch{} updateCounts(); }
   $("btnExport").onclick = ()=>{
     persistCache();
     const blob = new Blob([JSON.stringify(cache, null, 2)], {type:"application/json"});
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
-    a.download = `maptrip_cache_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`;
+    a.href = url; a.download = `maptrip_cache_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`;
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   };
 
-  /* ===================== CORE HELPERS ===================== */
-  // MapTrip requires: /{south,west}/{north,east}
+  /* ===================== HELPERS ===================== */
   function bboxParamsFromMap(pad = 0){
     const b = map.getBounds().pad(pad);
     const sw = b.getSouthWest(), ne = b.getNorthEast();
     return { south: sw.lat, west: sw.lng, north: ne.lat, east: ne.lng };
   }
-
-  // reconcile markers without flicker
   function reconcileMarkers(cluster, dict, items, getId, toLatLng, toIcon, toPopup){
     const nextIds = new Set();
     for (const it of items){
-      const id = getId(it);
-      if (!id) continue;
+      const id = getId(it); if (!id) continue;
       nextIds.add(id);
-      const ll = toLatLng(it);
-      if (!ll) continue;
+      const ll = toLatLng(it); if (!ll) continue;
       if (dict[id]) {
         dict[id].setLatLng(ll).setIcon(toIcon(it)).bindPopup(toPopup(it));
       } else {
-        const m = L.marker(ll, { icon: toIcon(it) }).bindPopup(toPopup(it));
+        const m = L.marker(ll, { icon: toIcon(it), zIndexOffset: 0 }).bindPopup(toPopup(it));
         dict[id] = m; cluster.addLayer(m);
       }
     }
     for (const id of Object.keys(dict)){
-      if (!nextIds.has(id)){
-        cluster.removeLayer(dict[id]); delete dict[id];
-      }
+      if (!nextIds.has(id)){ cluster.removeLayer(dict[id]); delete dict[id]; }
     }
   }
 
@@ -217,19 +231,14 @@
     });
     return list;
   }
-
-  function popupOSM(it){
-    return `<b>${it.name||"Без названия"}</b>${it.addr?("<div>"+it.addr+"</div>"):""}`;
-  }
+  function popupOSM(it){ return `<b>${it.name||"Без названия"}</b>${it.addr?("<div>"+it.addr+"</div>"):""}`; }
 
   /* ===================== MAPTRIP LOADERS ===================== */
-  // Persistent dicts for current view markers
   const dictMTpark = {};
   const dictMTfuel = {};
-  const dictRwPts  = {}; // points from MapTrip DE + OSM nodes (we keep just current view here)
+  const dictRwPts  = {};
 
-  // add to global cache + return normalized item
-  function normalizeAndCache(feature, type){ // type: 'parking'|'fuel'
+  function normalizeAndCache(feature, type){
     const pr = feature.properties || {};
     const [lon,lat] = feature.geometry?.coordinates || [];
     const id = pr.id || `${lat},${lon}`;
@@ -249,7 +258,6 @@
     cache[type][id] = obj;
     return obj;
   }
-
   function mtPopupParkingObj(o){
     const addr = o.address || {};
     const address = [addr.street, addr.zipcode, addr.city].filter(Boolean).join(", ");
@@ -270,76 +278,55 @@
     const url = `${MAPTRIP_BASE}/poi/parking/${south},${west}/${north},${east}`;
     try{
       const r = await fetch(url, { headers: MT_HEADERS });
-      if (!r.ok){
-        if (r.status===401 || r.status===403) toast("MapTrip: ошибка доступа к парковкам (проверьте токен).");
-        return;
-      }
+      if (!r.ok){ if (r.status===401||r.status===403) toast("MapTrip: нет доступа к парковкам (проверьте токен)."); return; }
       const gj = await r.json();
       const items = (gj.features||[])
-        .map(f => {
-          const o = normalizeAndCache(f, "parking");
-          return { id: "park-"+o.id, lat: o.lat, lon: o.lon, obj: o };
-        })
+        .map(f => { const o = normalizeAndCache(f, "parking"); return { id:"park-"+o.id, lat:o.lat, lon:o.lon, obj:o }; })
         .filter(x => Number.isFinite(x.lat) && Number.isFinite(x.lon));
 
       reconcileMarkers(
         clMTparking, dictMTpark, items,
-        it => it.id,
-        it => [it.lat, it.lon],
-        () => iconDot("parking"),
-        it => mtPopupParkingObj(it.obj)
+        it=>it.id,
+        it=>[it.lat,it.lon],
+        ()=>iconDot("parking"),
+        it=>mtPopupParkingObj(it.obj)
       );
       persistCache();
-    }catch(e){
-      toast("MapTrip: сеть/ошибка парковок.");
-    }
+    }catch{ toast("MapTrip: сеть/ошибка парковок."); }
   }
 
   async function loadMTfuel(){
     const {south,west,north,east} = bboxParamsFromMap(0);
-    // by requirement — Diesel only
     const url = `${MAPTRIP_BASE}/poi/fuelstations/Diesel/${south},${west}/${north},${east}`;
     try{
       const r = await fetch(url, { headers: MT_HEADERS });
-      if (!r.ok){
-        if (r.status===401 || r.status===403) toast("MapTrip: ошибка доступа к АЗС (проверьте токен).");
-        return;
-      }
+      if (!r.ok){ if (r.status===401||r.status===403) toast("MapTrip: нет доступа к АЗС (проверьте токен)."); return; }
       const gj = await r.json();
       const items = (gj.features||[])
-        .map(f => {
-          const o = normalizeAndCache(f, "fuel");
-          return { id: "fuel-"+o.id, lat: o.lat, lon: o.lon, obj: o };
-        })
+        .map(f => { const o = normalizeAndCache(f, "fuel"); return { id:"fuel-"+o.id, lat:o.lat, lon:o.lon, obj:o }; })
         .filter(x => Number.isFinite(x.lat) && Number.isFinite(x.lon));
 
       reconcileMarkers(
         clMTfuel, dictMTfuel, items,
-        it => it.id,
-        it => [it.lat, it.lon],
-        () => iconDot("fuel"),
-        it => mtPopupFuelObj(it.obj)
+        it=>it.id,
+        it=>[it.lat,it.lon],
+        ()=>iconDot("fuel"),
+        it=>mtPopupFuelObj(it.obj)
       );
       persistCache();
-    }catch(e){
-      toast("MapTrip: сеть/ошибка АЗС.");
-    }
+    }catch{ toast("MapTrip: сеть/ошибка АЗС."); }
   }
 
-  // MapTrip roadworks (DE) — both points and lines
   async function loadMTRoadworks(){
     const {south,west,north,east} = bboxParamsFromMap(0);
     const urlPt = `${MAPTRIP_BASE}/poi/roadworks/points/${south},${west}/${north},${east}`;
     const urlLn = `${MAPTRIP_BASE}/poi/roadworks/lines/${south},${west}/${north},${east}`;
-
     try{
-      // points
       const rp = await fetch(urlPt, { headers: MT_HEADERS });
       if (rp.ok){
         const gj = await rp.json();
         const items = (gj.features||[]).map(f=>{
-          const pr = f.properties||{};
-          const [lon,lat] = f.geometry?.coordinates||[];
+          const pr = f.properties||{}; const [lon,lat] = f.geometry?.coordinates||[];
           return { id: pr.id || `${lat},${lon}`, lat, lon, pr };
         }).filter(x => Number.isFinite(x.lat) && Number.isFinite(x.lon));
         reconcileMarkers(
@@ -348,49 +335,43 @@
           it=>[it.lat,it.lon],
           ()=>iconDot("roadpt"),
           it=>{
-            const pr = it.pr;
-            const dates = [pr.startDate, pr.endDate].filter(Boolean).join(" → ");
-            const len   = pr.length ? `, ~${(pr.length/1000).toFixed(2)} км` : "";
+            const pr = it.pr, dates = [pr.startDate, pr.endDate].filter(Boolean).join(" → ");
+            const len = pr.length ? `, ~${(pr.length/1000).toFixed(2)} км` : "";
             const speed = pr.speedLimit ? `, ${pr.speedLimit} км/ч` : "";
             return `<b>${pr.type||"Road works"} ${pr.road?("— "+pr.road):""}</b>
-              ${pr.startName||pr.start?("<div>"+(pr.startName||pr.start)+" → "+(pr.endName||pr.end||"")+"</div>"):""}
-              ${dates?("<div>"+dates+len+speed+"</div>"):""}
-              ${pr.description?('<div style="margin-top:6px">'+pr.description+'</div>'):""}`;
+                ${pr.startName||pr.start?("<div>"+(pr.startName||pr.start)+" → "+(pr.endName||pr.end||"")+"</div>"):""}
+                ${dates?("<div>"+dates+len+speed+"</div>"):""}
+                ${pr.description?('<div style="margin-top:6px">'+pr.description+'</div>'):""}`;
           }
         );
       }
-      // lines
       const rl = await fetch(urlLn, { headers: MT_HEADERS });
       clRwLn.clearLayers();
       if (rl.ok){
         const gj2 = await rl.json();
-        clRwLn.addData(gj2).eachLayer(l=>l.bindPopup((() => {
+        clRwLn.addData(gj2).eachLayer(l=>{
           const pr = l.feature.properties || {};
           const dates = [pr.startDate, pr.endDate].filter(Boolean).join(" → ");
-          const len   = pr.length ? `, ~${(pr.length/1000).toFixed(2)} км` : "";
+          const len = pr.length ? `, ~${(pr.length/1000).toFixed(2)} км` : "";
           const speed = pr.speedLimit ? `, ${pr.speedLimit} км/ч` : "";
-          return `<b>${pr.type||"Road works"} ${pr.road?("— "+pr.road):""}</b>
+          l.bindPopup(`<b>${pr.type||"Road works"} ${pr.road?("— "+pr.road):""}</b>
             ${pr.startName||pr.start?("<div>"+(pr.startName||pr.start)+" → "+(pr.endName||pr.end||"")+"</div>"):""}
             ${dates?("<div>"+dates+len+speed+"</div>"):""}
-            ${pr.description?('<div style="margin-top:6px">'+pr.description+'</div>'):""}`;
-        })()));
+            ${pr.description?('<div style="margin-top:6px">'+pr.description+'</div>'):""}`);
+        });
       }
-    }catch(_){}
+    }catch{}
   }
 
-  /* ===================== OSM ROADWORKS fallback ===================== */
+  /* ===================== OSM ROADWORKS HINTS ===================== */
   async function loadOSMRoadworks(){
-    // lightweight hint layer anywhere in EU/world (construction features)
     const c = map.getCenter(), rad = 50000;
     const q = `
       [out:json][timeout:50];
       (
-        way["highway"="construction"](around:${rad},${c.lat},${c.lng});
         node["highway"="construction"](around:${rad},${c.lat},${c.lng});
-      );
-      out geom tags;`;
+      ); out tags;`;
     const d = await overpassPOST(q);
-    // Only draw nodes as red points (we keep line layer to MapTrip DE)
     const pts = [];
     (d.elements||[]).forEach(el=>{
       if (el.type==="node"){
@@ -408,59 +389,38 @@
 
   /* ===================== MASTER LOAD & EVENTS ===================== */
   async function loadOSMLocal(){
-    const c = map.getCenter(), rad = Math.min(500000, Math.max(5000, 50*1000)); // 50km default
+    const c = map.getCenter(), rad = 50*1000;
     const osmItems = await fetchOSMServicesAndRepair(c.lat, c.lng, rad);
     const serv = osmItems.filter(x => x.guess !== "repair");
     const rep  = osmItems.filter(x => x.guess === "repair");
-
-    reconcileMarkers(
-      clService, dictOSMserv, serv,
-      it => it.id,
-      it => [it.lat, it.lon],
-      ()  => iconDot("service"),
-      it => popupOSM(it)
-    );
-    reconcileMarkers(
-      clRepair, dictOSMrep, rep,
-      it => it.id,
-      it => [it.lat, it.lon],
-      ()  => iconDot("repair"),
-      it => popupOSM(it)
-    );
+    reconcileMarkers(clService, dictOSMserv, serv, it=>it.id, it=>[it.lat,it.lon], ()=>iconDot("service"), it=>popupOSM(it));
+    reconcileMarkers(clRepair, dictOSMrep, rep,  it=>it.id, it=>[it.lat,it.lon], ()=>iconDot("repair"),  it=>popupOSM(it));
   }
 
   async function loadAll(){
-    // base OSM (always)
     await loadOSMLocal();
-
-    // MapTrip (fuel/parking/roadworks DE)
     await Promise.all([
       loadMTparking(),
       loadMTfuel(),
       (async ()=>{ await loadMTRoadworks(); await loadOSMRoadworks(); })()
     ]);
-
     updateCounts();
   }
 
-  // Throttled updates
-  let moveTimer = null;
+  let moveTimer=null;
   map.on("moveend zoomend", ()=>{
     if (moveTimer) clearTimeout(moveTimer);
     moveTimer = setTimeout(loadAll, 450);
-    // persist view
     localStorage.setItem(LS_STATE_KEY, JSON.stringify({ center:[map.getCenter().lat, map.getCenter().lng], zoom: map.getZoom() }));
   });
 
-  // initial load
   (async ()=>{ await loadAll(); })();
 
-  // tiny flicker fix for clusters at tile seams
+  // tiny flicker fix
   const originalProject = map.options.crs.project;
   map.options.crs.project = function (latlng) {
     const p = originalProject.call(this, latlng);
-    p.x += 0.0000001; p.y += 0.0000001;
-    return p;
+    p.x += 0.0000001; p.y += 0.0000001; return p;
   };
   </script>
 </body>
